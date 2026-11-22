@@ -34371,6 +34371,7 @@ const DJ_PADS_PRO=(()=>{
     }
   }
   function mountSong(){
+    return;/* 22 nov (Jorge): DJ 8D queda con su diseño aprobado; la fila de PADS no va encima del Campo 8D (achicaba el círculo) */
     const host=document.querySelector("#ldjx .djp-song");if(!host||songView)return;
     const bar=modeBar("song",SONG_MODES),grid=E("div",{class:"djpp-grid djpp-song-grid",hidden:""}),pp=pads("song");grid.append(...pp);
     // en HOT CUE los pads llaman a los cues de la canción (tocar = ir/guardar, mantener = borrar)
