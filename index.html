@@ -27290,7 +27290,7 @@ function create(B){
  ];
  library.replaceChildren(...libraryOptions());
  library.onchange=()=>{if(library.value)load(library.value);else library.value=sourceChoice};
- const fileInput=E("input",{type:"file",multiple:true,accept:"audio/*,.wav,.mp3,.flac,.ogg,.m4a,.aif,.aiff",hidden:true});fileInput.onchange=()=>{if(fileInput.files.length)importFiles([...fileInput.files]);fileInput.value=""};
+ const fileInput=E("input",{type:"file",multiple:true,accept:"audio/*,.wav,.mp3,.flac,.ogg,.m4a,.aif,.aiff,.zip,application/zip",hidden:true});fileInput.onchange=()=>{if(fileInput.files.length)importFiles([...fileInput.files]);fileInput.value=""};
  const button=(name,fn,cls="")=>E("button",{type:"button",class:"ldx-btn "+cls,onclick:fn},name);
  const play=button("▶ Play",()=>toggle(),"ldx-song-play");
  const stop=button("↤ Inicio",()=>seek(0),"ldx-song-stop");
@@ -27306,11 +27306,14 @@ function create(B){
  const editMotion=button("Editar movimiento",()=>B.editMovement(),"ldx-song-motion");
  const selectionBar=E("div",{class:"ldx-song-selection"},selectAll,groupButton,ungroupButton,editMotion,selectedCount);
  const note=E("p",{class:"ldx-song-status",role:"status","aria-live":"polite"},status);
- const add=button("＋ Cargar pistas",()=>fileInput.click());
+ const add=button("＋ Cargar pistas",()=>fileInput.click());add.title="Elige tus archivos de audio o un .zip con las pistas";
+ // 23 nov (Jorge): sector para editar las pistas → cuadrarlas entre sí (DJ_EDITOR_PISTAS) y separar una canción en 6 pistas (DJ_STEMS)
+ const edit=button("✂ Editar pistas",()=>editTracks(),"ldx-song-edit");edit.title="Cuadra las pistas entre sí: muévelas en el tiempo y escucha cómo calzan";
+ const split=button("Separar en 6 pistas",()=>{try{DJ_STEMS_PROPIOS.open()}catch(e){message("La separación en 6 pistas no está disponible aquí.")}},"ldx-song-split");split.title="Separa una canción tuya en 6 pistas con IA";
  const save=button("Guardar canción",()=>saveProject());
  const fresh=button("Nueva",()=>clearProject());
  section.append(E("div",{class:"ldx-song-head"},E("h3",{},"CANCIONES"),titleInput),
-  E("div",{class:"ldx-song-actions ldx-song-source"},library,add),
+  E("div",{class:"ldx-song-actions ldx-song-source"},library,add,edit,split),
   E("div",{class:"ldx-song-actions ldx-song-project"},save,fresh),
   E("div",{class:"ldx-song-transport"},play,stop,time,progress),selectionBar,list,note,fileInput);
  section.addEventListener("dragover",e=>{if(e.dataTransfer.types.includes("Files")){e.preventDefault();section.classList.add("drag")}});
@@ -27335,13 +27338,27 @@ function create(B){
  function install(data,newTitle,id=null,{reveal=true,choice=id||""}={}){pause();dispose();title=newTitle||"Mi canción";titleInput.value=title;projectId=id;sourceChoice=choice;library.value=choice;offset=0;barCursor=0;duration=Math.max(...data.map(t=>t.buffer.duration));tracks=data.map(makeTrack);state="paused";
   progress.max=duration;progress.value=0;render();if(tracks[0])B.select(tracks[0]);B.changed();if(reveal)B.show();message(tracks.length+" pistas listas · un solo Play · "+fmt(duration));paint()}
  async function decode(ab){const d=K.ensureLive();return d.c.decodeAudioData(ab)}
- async function importFiles(files){if(loading)return;if(files.length+tracks.length>36){message("Puedes cargar hasta 36 pistas por canción.");return}
+ async function importFiles(files){if(loading)return;
+  // 23 nov: también acepta un .zip con las pistas adentro (se abre aquí mismo, no se sube a ningún lado)
+  if(typeof DJ_ZIP!=="undefined"&&files.some(DJ_ZIP.isZip)){try{message("Abriendo el ZIP…");files=await DJ_ZIP.expand(files)}catch(e){message(e.message);return}}
+  if(files.length+tracks.length>36){message("Puedes cargar hasta 36 pistas por canción.");return}
   const token=++loadingToken;pause();loading=true;paint();message("Leyendo "+files.length+" pistas…");
   try{const data=tracks.map(t=>({name:t.name,buffer:t.buffer,blob:t.blob,fileName:t.fileName,automation:t.automation,printedMix:t.printedMix,automationFinal:t.automationFinal,takeId:t.takeId,settings:settings(t)}));
    for(const f of files){if(!f.type.startsWith("audio/")&&!/\.(wav|mp3|flac|ogg|oga|m4a|aac|aif|aiff)$/i.test(f.name))throw new Error("Formato no reconocido: "+f.name);
     const buffer=await decode(await f.arrayBuffer());data.push({name:f.name.replace(/\.[^.]+$/,""),fileName:f.name,blob:f,buffer})}
    if(token!==loadingToken)return;install(data,title,projectId);prepareCriterionScore(tracks,null)
   }catch(e){message("No se cargaron las pistas nuevas: "+e.message)}finally{if(token===loadingToken){loading=false;paint()}}}
+ function editTracks(){
+  if(loading)return;const L=tracks.filter(t=>!t.derivado);
+  if(!L.length){message("Primero carga las pistas que quieres editar.");return}
+  if(typeof DJ_EDITOR_PISTAS==="undefined"||!DJ_EDITOR_PISTAS.on){message("El editor de pistas no está disponible.");return}
+  pause();
+  DJ_EDITOR_PISTAS.open({tracks:L.map(t=>({name:t.name,color:t.color,buffer:t.buffer})),onApply:ms=>{
+   if(!ms.some(Boolean)){message("Las pistas quedaron como estaban.");return}
+   const data=L.map((t,i)=>{const d={name:t.name,buffer:t.buffer,blob:t.blob,fileName:t.fileName,automation:t.automation,printedMix:t.printedMix,automationFinal:t.automationFinal,takeId:t.takeId,settings:settings(t)};
+    if(ms[i]){d.buffer=DJ_EDITOR_PISTAS.shift(t.buffer,ms[i]);d.blob=DJ_EDITOR_PISTAS.wav(d.buffer);d.fileName=t.name+".wav"}return d});
+   install(data,title,projectId);prepareCriterionScore(tracks,null);
+   message("Pistas cuadradas ("+ms.filter(Boolean).length+" movidas). «Guardar canción» las deja así en este equipo.")}})}
  function load(id,options){const song=builtInSongs.find(item=>item.id===id);return song?loadBuiltIn(song,options):loadSaved(id,options)}
  // CRITERIO IAH DJ 8D (docs/CRITERIO_IAH_DJ_8D_2026-11-20.md §1 «Escuchar antes de decidir»): con la canción cargada por pistas,
  // IAH escucha todas las pistas (ambos canales) y escribe la partitura espacial de cada una antes de que suene (IAH_DJ_CRITERIO).
@@ -35348,5 +35365,162 @@ const DJ_VISTA_ANCHA=(()=>{
   return {on:true,paso};
 })();
 </script>
+<style>/* Editor de pistas (23 nov 2026) */
+.ldj-dlg.djed{max-width:min(1500px,96vw);width:96vw;max-height:92vh;display:flex;flex-direction:column;gap:8px}
+.ldj-dlg.djed:not([open]){display:none}
+.djed-head{display:flex;align-items:center;justify-content:space-between}
+.djed-help{margin:0;font:13px/1.4 system-ui,sans-serif;color:#b8c9dc}
+.djed-bar{display:flex;flex-wrap:wrap;align-items:center;gap:14px}
+.djed-bar label{display:flex;align-items:center;gap:6px;color:#b8c9dc}
+.djed-zoom{width:160px}.djed-posl{flex:1 1 220px}.djed-pos{flex:1;width:100%}
+.djed-info{font:12px ui-monospace,monospace;color:#9fe9ff}
+.djed-play{min-width:120px}
+.djed-rulerrow,.djed-row{display:grid;grid-template-columns:120px 1fr 190px;gap:8px;align-items:center}
+.djed-ruler,.djed-wave{width:100%;display:block;border-radius:6px}
+.djed-ruler{cursor:pointer;height:26px}
+.djed-wave{height:54px;cursor:ew-resize;touch-action:none;border:1px solid #1e3344}
+.djed-rows{overflow:auto;display:flex;flex-direction:column;gap:5px;min-height:120px}
+.djed-name{font:600 12px system-ui,sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.djed-ctl{display:flex;align-items:center;gap:4px}
+.djed-ms{width:76px;background:#0b1622;color:#eaf4ff;border:1px solid #2a465c;border-radius:6px;padding:5px 6px;font:13px ui-monospace,monospace;text-align:right}
+.djed-n{min-width:30px;padding:5px 6px}
+.djed-foot{display:flex;align-items:center;gap:8px;margin-top:4px}.djed-sp{flex:1}
+.djed-ok{background:#1f6f6b;border-color:#58eee0;color:#eafffb;font-weight:600}
+@media (max-width:760px){.djed-rulerrow,.djed-row{grid-template-columns:70px 1fr}.djed-ctl{grid-column:1/-1;justify-content:flex-end}.djed-rulerrow span:last-child{display:none}}
+</style>
+<script>/* ORBITAL DJ · ZIP de pistas y editor para cuadrarlas (23 nov 2026, pedido de Jorge).
+   DJ_ZIP.expand(files): si entre los archivos viene un .zip, lo abre en el navegador (sin subir nada) y devuelve sus audios.
+   DJ_EDITOR_PISTAS.open({tracks,onApply}): ventana con todas las pistas en una misma línea de tiempo; cada pista se arrastra
+   o se ajusta en milisegundos, se escucha la mezcla (estéreo simple, sin 8D) y «Aplicar» entrega los desfases.
+   DJ_EDITOR_PISTAS.shift(buffer,ms) y .wav(buffer) construyen el audio ya corrido y su archivo para guardar. */
+const DJ_ZIP=(()=>{
+  const AUDIO=/\.(wav|mp3|flac|ogg|oga|m4a|aac|aif|aiff)$/i;
+  const MIME={wav:"audio/wav",mp3:"audio/mpeg",flac:"audio/flac",ogg:"audio/ogg",oga:"audio/ogg",m4a:"audio/mp4",aac:"audio/aac",aif:"audio/aiff",aiff:"audio/aiff"};
+  const isZip=f=>/\.zip$/i.test(f.name)||/zip/.test(f.type||"");
+  async function inflate(bytes){const ds=new DecompressionStream("deflate-raw");return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(ds)).arrayBuffer())}
+  async function read(file){
+    const buf=await file.arrayBuffer(),u8=new Uint8Array(buf),dv=new DataView(buf),out=[];
+    let e=-1;for(let i=u8.length-22;i>=Math.max(0,u8.length-66000);i--)if(dv.getUint32(i,true)===0x06054b50){e=i;break}
+    if(e<0)throw new Error("El archivo "+file.name+" no es un ZIP válido.");
+    const n=dv.getUint16(e+10,true);let p=dv.getUint32(e+16,true);
+    if(p===0xffffffff)throw new Error("El ZIP "+file.name+" es demasiado grande (ZIP64). Divídelo en dos.");
+    for(let k=0;k<n&&p+46<=u8.length;k++){
+      if(dv.getUint32(p,true)!==0x02014b50)break;
+      const flags=dv.getUint16(p+8,true),method=dv.getUint16(p+10,true),csize=dv.getUint32(p+20,true),nl=dv.getUint16(p+28,true),xl=dv.getUint16(p+30,true),cl=dv.getUint16(p+32,true),lo=dv.getUint32(p+42,true);
+      const name=new TextDecoder(flags&0x800?"utf-8":"latin1").decode(u8.subarray(p+46,p+46+nl));p+=46+nl+xl+cl;
+      const base=name.split("/").pop();
+      if(!base||name.endsWith("/")||base.startsWith(".")||name.includes("__MACOSX/")||!AUDIO.test(base))continue;
+      if(flags&1)throw new Error("El ZIP "+file.name+" tiene contraseña.");
+      const ln=dv.getUint16(lo+26,true),lx=dv.getUint16(lo+28,true),start=lo+30+ln+lx,raw=u8.subarray(start,start+csize);
+      let data;if(method===0)data=raw;else if(method===8)data=await inflate(raw);else throw new Error("No puedo abrir «"+base+"» dentro del ZIP (compresión no soportada).");
+      out.push(new File([data],base,{type:MIME[base.split(".").pop().toLowerCase()]||"audio/*"}));
+    }
+    if(!out.length)throw new Error("El ZIP "+file.name+" no trae archivos de audio.");
+    return out.sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));
+  }
+  async function expand(files){const out=[];for(const f of files){if(isZip(f))out.push(...await read(f));else out.push(f)}return out}
+  return {on:true,expand,isZip};
+})();
+
+const DJ_EDITOR_PISTAS=(()=>{
+  if(typeof document==="undefined")return {on:false};
+  const E=(tag,attrs={},...kids)=>{const n=document.createElement(tag);for(const [k,v] of Object.entries(attrs)){if(v==null)continue;if(k.startsWith("on"))n.addEventListener(k.slice(2),v);else n.setAttribute(k,String(v))}for(const c of kids.flat())if(c!=null)n.append(c.nodeType?c:document.createTextNode(c));return n};
+  const fmt=s=>{const m=Math.floor(Math.abs(s)/60),x=Math.abs(s)-60*m;return (s<0?"−":"")+m+":"+(x<10?"0":"")+x.toFixed(x<10&&m===0?2:1)};
+  const MAX=20000;// tope del ajuste: ±20 s
+  // audio corrido: ms > 0 la pista entra más tarde (silencio al inicio); ms < 0 entra antes (se corta el comienzo)
+  function shift(buffer,ms){
+    const sr=buffer.sampleRate,d=Math.round(ms*sr/1000);if(!d)return buffer;
+    const len=Math.max(1,buffer.length+d),out=new AudioBuffer({length:len,numberOfChannels:buffer.numberOfChannels,sampleRate:sr});
+    for(let ch=0;ch<buffer.numberOfChannels;ch++){const x=buffer.getChannelData(ch),y=out.getChannelData(ch);if(d>0)y.set(x,d);else y.set(x.subarray(-d,-d+len))}
+    return out;
+  }
+  // WAV PCM de 24 bits (para guardar la canción con las pistas ya cuadradas)
+  function wav(buffer){
+    const ch=buffer.numberOfChannels,n=buffer.length,sr=buffer.sampleRate,bytes=n*ch*3,ab=new ArrayBuffer(44+bytes),dv=new DataView(ab),u8=new Uint8Array(ab);
+    const str=(o,s)=>{for(let i=0;i<s.length;i++)dv.setUint8(o+i,s.charCodeAt(i))};
+    str(0,"RIFF");dv.setUint32(4,36+bytes,true);str(8,"WAVEfmt ");dv.setUint32(16,16,true);dv.setUint16(20,1,true);dv.setUint16(22,ch,true);dv.setUint32(24,sr,true);dv.setUint32(28,sr*ch*3,true);dv.setUint16(32,ch*3,true);dv.setUint16(34,24,true);str(36,"data");dv.setUint32(40,bytes,true);
+    const C=[];for(let c=0;c<ch;c++)C.push(buffer.getChannelData(c));let o=44;
+    for(let i=0;i<n;i++)for(let c=0;c<ch;c++){let v=Math.max(-1,Math.min(1,C[c][i]));v=Math.round(v*8388607);if(v<0)v+=16777216;u8[o++]=v&255;u8[o++]=(v>>8)&255;u8[o++]=(v>>16)&255}
+    return new Blob([ab],{type:"audio/wav"});
+  }
+  function peaks(buffer){// máximo absoluto cada 2 ms (suma de canales)
+    const sr=buffer.sampleRate,step=Math.max(1,Math.round(sr*.002)),n=Math.ceil(buffer.length/step),p=new Float32Array(n),a=buffer.getChannelData(0),b=buffer.numberOfChannels>1?buffer.getChannelData(1):null;
+    for(let k=0;k<n;k++){let m=0;const e=Math.min(buffer.length,(k+1)*step);for(let i=k*step;i<e;i+=2){const v=Math.abs(a[i])+(b?Math.abs(b[i]):0);if(v>m)m=v}p[k]=b?m/2:m}
+    return {p,dt:step/sr};
+  }
+  let dlg=null;
+  function open({tracks,onApply}){
+    if(dlg)dlg.remove();
+    const T=tracks.map(t=>({name:t.name,color:t.color||"#62e4db",buffer:t.buffer,ms:0,pk:null,cv:null,inp:null}));
+    const dur=Math.max(...T.map(t=>t.buffer.duration));
+    let span=Math.min(dur,12),view=0,cursor=0,ac=null,srcs=[],t0=0,c0=0,raf=0,W=900;
+    const clampView=()=>{span=Math.max(.2,Math.min(dur+MAX/500,span));view=Math.max(-2,Math.min(dur-span*.2,view))};
+    const xOf=s=>(s-view)/span*W,sOf=x=>view+x/W*span;
+    const ruler=E("canvas",{class:"djed-ruler",height:"26"}),rows=E("div",{class:"djed-rows"});
+    const playBtn=E("button",{type:"button",class:"ldx-btn djed-play",onclick:()=>ac?stop():play()},"▶ Escuchar");
+    const zoom=E("input",{type:"range",min:"0",max:"100",value:"60","aria-label":"Zoom de la línea de tiempo",class:"djed-zoom"});
+    const pos=E("input",{type:"range",min:"0",max:"1000",value:"0","aria-label":"Posición en la canción",class:"djed-pos"});
+    const info=E("output",{class:"djed-info"},"");
+    zoom.oninput=()=>{const mid=cursor>=view&&cursor<=view+span?cursor:view+span/2,f=(mid-view)/span;span=dur*Math.pow(.2/dur,zoom.value/100);view=mid-f*span;clampView();draw()};
+    pos.oninput=()=>{view=pos.value/1000*Math.max(0,dur-span);clampView();draw()};
+    function drawRow(t){
+      const cv=t.cv,g=cv.getContext("2d"),H=cv.height;cv.width=W;g.clearRect(0,0,W,H);g.fillStyle="#0b1622";g.fillRect(0,0,W,H);
+      if(!t.pk)return;const {p,dt}=t.pk,off=t.ms/1000;g.fillStyle=t.color;g.globalAlpha=.9;
+      for(let x=0;x<W;x++){const a=Math.floor((sOf(x)-off)/dt),b=Math.max(a+1,Math.floor((sOf(x+1)-off)/dt));if(b<=0||a>=p.length)continue;let m=0;for(let k=Math.max(0,a);k<Math.min(p.length,b);k+=Math.max(1,Math.floor((b-a)/40)))if(p[k]>m)m=p[k];const h=Math.max(1,Math.min(1,m*1.6)*(H-4));g.fillRect(x,(H-h)/2,1,h)}
+      g.globalAlpha=1;const x0=xOf(off);if(x0>=0&&x0<=W){g.fillStyle="#ffffff";g.fillRect(x0,0,1,H)}// comienzo de la pista
+      const xc=xOf(cursor);if(xc>=0&&xc<=W){g.fillStyle="#ffd166";g.fillRect(xc,0,2,H)}
+    }
+    function drawRuler(){
+      const g=ruler.getContext("2d");ruler.width=W;g.clearRect(0,0,W,26);g.fillStyle="#9fb6c9";g.font="10px system-ui";
+      const steps=[.01,.02,.05,.1,.2,.5,1,2,5,10,30,60],st=steps.find(s=>s/span*W>=70)||60;
+      for(let s=Math.ceil(view/st)*st;s<view+span;s+=st){const x=xOf(s);g.fillRect(x,16,1,10);g.fillText(st<1?s.toFixed(2)+" s":fmt(s),x+3,12)}
+      const xc=xOf(cursor);g.fillStyle="#ffd166";g.fillRect(xc-1,0,2,26);
+    }
+    function draw(){W=Math.max(300,rows.clientWidth-250||900);drawRuler();T.forEach(drawRow);pos.value=Math.round(1000*Math.max(0,view)/Math.max(.001,dur-span));info.textContent="Cursor "+fmt(cursor)+" · se ven "+(span<2?(span*1000).toFixed(0)+" ms":span.toFixed(1)+" s")}
+    function setMs(t,ms,keep){t.ms=Math.max(-MAX,Math.min(MAX,Math.round(ms)));if(!keep)t.inp.value=t.ms;drawRow(t);if(ac){stop();play()}}
+    T.forEach(t=>{
+      t.cv=E("canvas",{class:"djed-wave",height:"54",title:"Arrastra para mover esta pista"});
+      t.inp=E("input",{type:"number",class:"djed-ms",step:"1",min:-MAX,max:MAX,value:"0","aria-label":"Desfase de "+t.name+" en milisegundos"});
+      t.inp.oninput=()=>setMs(t,+t.inp.value||0,true);
+      const nb=(txt,d,lab)=>E("button",{type:"button",class:"ldx-btn djed-n","aria-label":lab+" "+t.name,title:lab,onclick:e=>setMs(t,t.ms+d*(e.shiftKey?10:1))},txt);
+      let drag=null;
+      t.cv.addEventListener("pointerdown",e=>{drag={x:e.clientX,ms:t.ms};t.cv.setPointerCapture(e.pointerId)});
+      t.cv.addEventListener("pointermove",e=>{if(drag)setMs(t,drag.ms+(e.clientX-drag.x)/W*span*1000)});
+      t.cv.addEventListener("pointerup",()=>{drag=null});t.cv.addEventListener("pointercancel",()=>{drag=null});
+      rows.append(E("div",{class:"djed-row"},E("b",{class:"djed-name",style:"color:"+t.color,title:t.name},t.name),t.cv,
+        E("div",{class:"djed-ctl"},nb("◀",-1,"Adelantar 1 ms (Mayús: 10)"),t.inp,E("small",{},"ms"),nb("▶",1,"Atrasar 1 ms (Mayús: 10)"),E("button",{type:"button",class:"ldx-btn djed-n",title:"Volver a 0","aria-label":"Volver a cero "+t.name,onclick:()=>setMs(t,0)},"0"))));
+    });
+    ruler.addEventListener("pointerdown",e=>{const r=ruler.getBoundingClientRect();cursor=Math.max(0,Math.min(dur,sOf(e.clientX-r.left)));if(ac){stop();play()}else draw()});
+    rows.addEventListener("wheel",e=>{e.preventDefault();if(e.shiftKey||Math.abs(e.deltaX)>Math.abs(e.deltaY)){view+=(e.deltaX||e.deltaY)/W*span;clampView();draw()}else{zoom.value=Math.max(0,Math.min(100,+zoom.value-Math.sign(e.deltaY)*4));zoom.oninput()}},{passive:false});
+    function stop(){cancelAnimationFrame(raf);if(ac){cursor=Math.min(dur,c0+(ac.currentTime-t0));for(const s of srcs)try{s.stop()}catch(_){}try{ac.close()}catch(_){}}ac=null;srcs=[];playBtn.textContent="▶ Escuchar";draw()}
+    function play(){
+      ac=new (window.AudioContext||window.webkitAudioContext)();const g=ac.createGain();g.gain.value=1/Math.sqrt(Math.max(1,T.length));g.connect(ac.destination);
+      if(cursor>=dur-.05)cursor=0;t0=ac.currentTime+.06;c0=cursor;
+      for(const t of T){const at=cursor-t.ms/1000;if(at>=t.buffer.duration)continue;const s=ac.createBufferSource();s.buffer=t.buffer;s.connect(g);if(at>=0)s.start(t0,at);else s.start(t0-at,0);srcs.push(s)}
+      playBtn.textContent="■ Parar";
+      const tick=()=>{if(!ac)return;cursor=c0+Math.max(0,ac.currentTime-t0);if(cursor>=dur){stop();return}if(cursor>view+span*.9){view=cursor-span*.1;clampView()}draw();raf=requestAnimationFrame(tick)};raf=requestAnimationFrame(tick);
+    }
+    const close=()=>{stop();dlg.close();dlg.remove();dlg=null};
+    dlg=E("dialog",{class:"ldj-dlg djed","aria-label":"Editar pistas"},
+      E("div",{class:"djed-head"},E("h3",{},"Editar pistas · cuadrar"),E("button",{type:"button",class:"ldj-close","aria-label":"Cerrar",onclick:close},"✕")),
+      E("p",{class:"djed-help"},"Arrastra cada pista hacia la izquierda o la derecha hasta que calce con las demás, o escribe el ajuste en milisegundos. La raya blanca marca dónde empieza la pista. «Escuchar» toca todas juntas desde el cursor amarillo (toca la regla para moverlo)."),
+      E("div",{class:"djed-bar"},playBtn,E("label",{},E("small",{},"Zoom"),zoom),E("label",{class:"djed-posl"},E("small",{},"Posición"),pos),info),
+      E("div",{class:"djed-rulerrow"},E("span",{}),ruler,E("span",{})),rows,
+      E("div",{class:"djed-foot"},E("button",{type:"button",class:"ldx-btn",onclick:()=>{T.forEach(t=>setMs(t,0))}},"Todo a 0"),E("span",{class:"djed-sp"}),
+        E("button",{type:"button",class:"ldx-btn",onclick:close},"Cancelar"),
+        E("button",{type:"button",class:"ldx-btn djed-ok",onclick:()=>{const ms=T.map(t=>t.ms);close();onApply&&onApply(ms)}},"Aplicar")));
+    document.body.append(dlg);dlg.addEventListener("cancel",e=>{e.preventDefault();close()});dlg.showModal();
+    zoom.oninput();
+    // las ondas se calculan de a una para no congelar la ventana
+    (async()=>{for(const t of T){if(!dlg)return;t.pk=peaks(t.buffer);drawRow(t);await new Promise(r=>setTimeout(r,0))}})();
+    addEventListener("resize",()=>{if(dlg)draw()});
+    return {close,get ms(){return T.map(t=>t.ms)},_set:(i,ms)=>setMs(T[i],ms),_T:T};
+  }
+  return {on:true,open,shift,wav,peaks};
+})();
+</script>
+<style>
+@media (min-width:1600px){#ldjx[data-console-view="dj"]:not([data-workspace="decks"]) .ldx-w-pad-toolbar .ldx-legacy-pad-bank{bottom:190px}}
+</style>
 </body>
 </html>
