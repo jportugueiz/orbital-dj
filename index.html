@@ -35264,5 +35264,89 @@ const ORB_APPS=(()=>{
   report.style.cssText="position:fixed;inset:10px;z-index:99999;background:#061018;color:#5ff;padding:20px;overflow:auto";
   document.body.appendChild(report);
 })();
-</script></body>
+</script><style>/* 23 nov (Jorge): vista ancha de DJ (≥1600 px). La barra FAMILIA/Nivel sube a la barra de arriba, los botones de banco bajan junto a
+   los pads, el fader del máster es más grande, los FX van en el mezclador y la fila de salidas en la botonera izquierda. DJ 8D no cambia. */
+@media (min-width:1600px){
+  #ldjx[data-console-view="dj"] .ldx-live-pads.ldx-live-compact > .ldx-w-pad-toolbar{position:fixed;top:14px;left:500px;right:610px;z-index:6;margin:0}
+  #ldjx[data-console-view="dj"]:not([data-workspace="decks"]) .ldx-live-pads.ldx-live-compact > .ldx-w-pad-toolbar{left:750px}
+  #ldjx[data-console-view="dj"] .ldx-live-pads.ldx-live-compact > .ldx-live-pad-channel{position:fixed;top:60px;left:500px;right:610px;z-index:6;margin:0}
+  #ldjx[data-console-view="dj"]:not([data-workspace="decks"]) .ldx-live-pads.ldx-live-compact > .ldx-live-pad-channel{left:750px}
+  #ldjx[data-console-view="dj"] .ldx-w-pad-toolbar .ldx-legacy-pad-bank{position:fixed;bottom:118px;height:22px;min-height:0;padding-top:0;padding-bottom:0;z-index:6}
+  #ldjx[data-console-view="dj"] .ldx-w-pad-toolbar .ldx-legacy-pad-bank:nth-of-type(even){left:215px}
+  #ldjx[data-console-view="dj"] .ldx-w-pad-toolbar .ldx-legacy-pad-bank:nth-of-type(odd){left:279px}
+  /* máster más grande */
+  #ldjx[data-console-view="dj"] .ldx-w-header .ldx-mvol-r{width:230px;zoom:1.25}
+  #ldjx[data-console-view="dj"] .ldx-w-header .ldx-mvol{align-self:center}
+  #ldjx[data-console-view="dj"] .ldx-w-header .ldx-mvol-row{align-items:center}
+  /* FX en el canal del mezclador */
+  #ldjx.djva .ldx-deck-mix > .djfx{margin-top:4px;padding:3px 6px}
+  #ldjx.djva .ldx-deck-mix > .djfx > *{margin-top:1px!important;margin-bottom:0!important;gap:2px!important}
+  #ldjx.djva-decks .ldx-deck-status{margin:2px 0 0;line-height:1.1}
+  #ldjx.djva-decks .ldx-w-pane{padding-top:4px;padding-bottom:2px}
+  #ldjx.djva .ldx-deck-mix > .djfx .djfx-head > .djp-lab{order:0;flex:1 1 auto}
+  #ldjx.djva .ldx-deck-mix > .djfx .djfx-head > button:last-of-type{order:1}
+  #ldjx.djva .ldx-deck-mix > .djfx .djfx-head > select{order:2;flex:1 1 55%!important}
+  #ldjx.djva .ldx-deck-mix > .djfx .djfx-head > button:first-of-type{order:3}
+  #ldjx.djva .ldx-deck-mix > .djfx .djfx-head,#ldjx.djva .ldx-deck-mix > .djfx .djfx-slot,#ldjx.djva .ldx-deck-mix > .djfx .djfx-foot{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+  #ldjx.djva .ldx-deck-mix > .djfx .djfx-head select{flex:1 1 100%;min-width:0}
+  #ldjx.djva .ldx-deck-mix > .djfx .djfx-sel{flex:1 1 60%;min-width:0;width:auto}
+  #ldjx.djva .ldx-deck-mix > .djfx .djfx-amt{flex:1 1 100%;width:100%;min-width:0}
+  #ldjx.djva .ldx-deck-mix > .djfx .djfx-mixlab{flex:1 1 100%}
+  #ldjx.djva .ldx-deck-mix > .djfx .djfx-mix{width:100%;min-width:0}
+  #ldjx.djva .ldx-deck-mix > .djfx .djfx-divs{flex:1 1 100%;display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;gap:2px;width:100%}
+  #ldjx.djva .ldx-deck-mix > .djfx .djfx-divs .djp-btn{flex:1 1 0!important;min-width:0!important;width:auto!important;padding:4px 0!important;font-size:10px;grid-column:auto!important}
+  /* fila de salidas en la botonera izquierda */
+  #ldjx.djva .ldx-w-module ~ .ldx-deck-tools,#ldjx.djva .ldx-deck-tools:is(nav > *,aside > *,div > .ldx-w-module ~ *){display:flex;flex-direction:column;gap:6px;margin-top:14px;width:100%}
+  #ldjx.djva .ldx-w-module ~ .ldx-deck-tools > *{display:flex;flex-direction:column;gap:6px;width:100%}
+  #ldjx.djva .ldx-w-module ~ .ldx-deck-tools :is(button,select,label,output){width:100%;min-width:0;max-width:100%;font-size:10px;white-space:normal;line-height:1.15;padding-left:3px;padding-right:3px;text-align:center}
+  #ldjx.djva:not([data-workspace="decks"]) .ldx-w-module ~ .ldx-deck-tools{display:none}
+  #ldjx.djva-decks .ldx-w-work-head{display:none}
+  #ldjx.djva .djva-head{display:flex;flex-direction:column;gap:6px;margin-top:10px;width:100%}
+  #ldjx.djva .djva-head button{width:100%;min-width:0;font-size:10px;white-space:normal;line-height:1.15;padding-left:3px;padding-right:3px}
+}
+#ldjx[data-console-view="dj"] .ldx-w-work-head{padding-top:2px;padding-bottom:2px;min-height:0}
+</style>
+<script>/* ORBITAL DJ · vista ancha de Decks A/B (23 nov 2026, pedido de Jorge: los decks completos sin scroll, sin achicar nada).
+   En pantallas de 1600 px o más y en la vista DJ:
+   · los FX de cada deck se muestran en su canal del mezclador (la mitad de abajo estaba vacía);
+   · la fila de salidas (Grabar set, salidas, Baja latencia, Biblioteca) baja a la botonera izquierda, que tenía espacio libre.
+   En pantallas más chicas todo vuelve a su lugar de siempre. Solo mueve elementos de sitio: no cambia qué hace ningún control. */
+const DJ_VISTA_ANCHA=(()=>{
+  if(typeof document==="undefined")return {on:false};
+  const mq=matchMedia("(min-width:1600px)");
+  function paso(){
+    const root=document.querySelector("#ldjx");if(!root)return;
+    const ancho=mq.matches&&root.dataset.consoleView==="dj";
+    root.classList.toggle("djva",ancho);
+    const bank=root.querySelector(".ldx-deck-bank");
+    const side=root.querySelector(".ldx-w-module")?.parentElement;
+    // FX → canal del mezclador (o de vuelta bajo los pads del deck)
+    if(bank){
+      const mix=bank.querySelectorAll(".ldx-deck-mixer > .ldx-deck-mix"),decks=bank.querySelectorAll(":scope > .ldx-deck");
+      ["A","B"].forEach((n,i)=>{
+        const box=bank.querySelector('.djfx[data-deck="'+n+'"]');if(!box)return;
+        if(ancho&&mix[i]){if(box.parentElement!==mix[i])mix[i].append(box)}
+        else if(decks[i]&&box.parentElement!==decks[i]){const p=decks[i].querySelector(".djp-deck");p?p.after(box):decks[i].append(box)}
+      });
+    }
+    // botones de la fila «Decks A/B» → botonera izquierda (la fila se oculta y los decks ganan su alto)
+    const head=root.querySelector(".ldx-w-work-head"),enDecks=ancho&&root.dataset.workspace==="decks"&&!!bank?.offsetParent;
+    let caja=side?.querySelector(":scope > .djva-head");
+    if(enDecks&&side&&head){
+      const propios=[...head.querySelectorAll("button")].filter(x=>x.offsetParent&&!/^Show Center$/i.test(x.textContent.trim()));// «Show Center» ya está en la botonera
+      if(propios.length){caja?.remove();caja=document.createElement("div");caja.className="djva-head";caja._origen=propios[0].parentElement;caja.append(...propios);side.append(caja)}
+    }else if(caja){
+      const o=caja._origen;if(o&&o.isConnected)o.append(...caja.children);caja.remove();
+    }
+    root.classList.toggle("djva-decks",enDecks);
+    // fila de salidas → botonera izquierda (o de vuelta bajo los decks)
+    const enPanel=bank?.parentElement?.querySelector(":scope > .ldx-deck-tools"),enLado=side?.querySelector(":scope > .ldx-deck-tools");
+    if(ancho&&side&&enPanel){enLado?.remove();side.append(enPanel)}
+    else if(!ancho&&enLado){if(bank&&!enPanel)bank.after(enLado);else if(enPanel)enLado.remove()}
+  }
+  setInterval(paso,400);mq.addEventListener?.("change",paso);
+  return {on:true,paso};
+})();
+</script>
+</body>
 </html>
