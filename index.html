@@ -10596,6 +10596,14 @@ const HEALING_KU100=(()=>{
       const lad=Math.sin(az*Math.PI/180);for(let ch=0;ch<2;ch++){const side=ch===1?lad:-lad,g=Math.pow(10,(1-r)*6*side/20*.5);for(let t=0;t<24;t++)out[ch][t]*=g}}
     return {h:out,d:del};
   }
+  // desplaza un HRIR "dly" muestras (con fracción) con sinc de 16 puntos y ventana Hann; devuelve un arreglo de largo N
+  const ITD_PAD=64,SH=8;
+  function desplaza(h,dly,N){const o=new Float32Array(N),di=Math.floor(dly),fr=dly-di;
+    if(fr<1e-4){for(let t=0;t<h.length&&t+di<N;t++)o[t+di]=h[t];return o}
+    const k=new Float32Array(2*SH);let s=0;for(let j=0;j<2*SH;j++){const x=j-SH+1-fr,w=.5+.5*Math.cos(Math.PI*x/SH);k[j]=(Math.abs(x)<1e-6?1:Math.sin(Math.PI*x)/(Math.PI*x))*Math.max(0,w);s+=k[j]}
+    for(let j=0;j<2*SH;j++)k[j]/=s;
+    for(let t=0;t<h.length;t++){const v=h[t];if(!v)continue;for(let j=0;j<2*SH;j++){const i=t+di+j-SH+1;if(i>=0&&i<N)o[i]+=v*k[j]}}
+    return o}
   // reflexiones tempranas mínimas (las mismas de las tomas, er.py): L 3,1/6,7/11,3 ms, R 4,3/8,9/12,7 ms a −9/−12/−15 dB
   function salaIR(ctx){
     const sr=ctx.sampleRate,b=ctx.createBuffer(2,Math.round(.014*sr),sr),T=[[[3.1,-9],[6.7,-12],[11.3,-15]],[[4.3,-9],[8.9,-12],[12.7,-15]]];
@@ -10614,26 +10622,89 @@ const HEALING_KU100=(()=>{
     const sala=ctx.createConvolver();sala.normalize=false;sala.buffer=salaIR(ctx);const salaG=ctx.createGain();salaG.gain.value=ER_ON?1:0;
     const mono=ctx.createGain();mono.channelCount=1;mono.channelCountMode="explicit";if(ER_ON){dist.connect(mono);mono.connect(sala)}sala.connect(salaG);salaG.connect(out);
     out.connect(dest);
-    let act=A,last=null,lastT=-1;
+    let act=A,last=null,lastT=-1,libre=0;const vivo=typeof OfflineAudioContext==="undefined"||!(ctx instanceof OfflineAudioContext);
     function update(at,p){
       const [az,el,r]=p;
       if(last&&at-lastT<MIN_DT)return;
       const dAng=last?Math.hypot((((az-last[0])%360)+540)%360-180,el-last[1]):999;
       const dg=Math.min(4,1/Math.max(.12,r))*KCAL;dist.gain.setTargetAtTime(dg,at,.04);
       if(dAng<1.5&&last&&Math.abs(r-last[2])<.05)return;
-      const {h,d:del}=hrir(az,el,r),b=ctx.createBuffer(2,d.n,ctx.sampleRate);b.copyToChannel(h[0],0);b.copyToChannel(h[1],1);
+      // 22 nov (ruido de «interferencia» al moverse): el cruce se programaba 55 ms adelante, pero el filtro nuevo se cargaba YA en el
+      // convolver que todavía estaba sonando → un chasquido en cada paso del viaje (hasta 16 por segundo). En vivo el cruce parte de
+      // inmediato y nunca se recarga un convolver que aún suena. Mismo filtro, mismo cruce de 30 ms, misma cadencia.
+      if(vivo&&ctx.currentTime<libre)return;
+      // 23 nov (ruiditos al moverse): el retardo entre oídos (ITD) va ahora DENTRO del filtro (desplazamiento fraccionario con sinc),
+      // en vez de mover dos DelayNode mientras suena: mover un retardo en vivo deja una «arenilla» aguda. Mismo ITD, mismo filtro, mismo cruce.
+      const {h,d:del}=hrir(az,el,r),m0=Math.min(del[0],del[1]),b=ctx.createBuffer(2,d.n+ITD_PAD,ctx.sampleRate);b.copyToChannel(desplaza(h[0],del[0]-m0,d.n+ITD_PAD),0);b.copyToChannel(desplaza(h[1],del[1]-m0,d.n+ITD_PAD),1);
       const idle=act===A?B:A;idle.c.buffer=b;
-      const t0=Math.max(at,ctx.currentTime);
+      const t0=vivo?ctx.currentTime+.012:Math.max(at,ctx.currentTime);libre=t0+XF+.008;
       idle.g.gain.cancelScheduledValues(t0);act.g.gain.cancelScheduledValues(t0);
       idle.g.gain.setValueAtTime(idle.g.gain.value,t0);idle.g.gain.linearRampToValueAtTime(1,t0+XF);
       act.g.gain.setValueAtTime(act.g.gain.value,t0);act.g.gain.linearRampToValueAtTime(0,t0+XF);
-      const m=Math.min(del[0],del[1]);dL.delayTime.setTargetAtTime((del[0]-m)/d.sr,t0,.02);dR.delayTime.setTargetAtTime((del[1]-m)/d.sr,t0,.02);
+      if(!vivo){const m=Math.min(del[0],del[1]);dL.delayTime.setTargetAtTime((del[0]-m)/d.sr,t0,.02);dR.delayTime.setTargetAtTime((del[1]-m)/d.sr,t0,.02)}
       act=idle;last=[az,el,r];lastT=at;
     }
     function stop(){try{out.disconnect()}catch(e){}try{input.disconnect()}catch(e){}}
     return {input,out,update,stop};
   }
-  return {data,hrir,voice,erIR:salaIR,get disponible(){return !!data()}};
+
+  /* ===== 23 nov · KU100 dentro del hilo de audio (AudioWorklet) =====
+     La versión con ConvolverNode cambia de filtro «a saltos» (un cruce cada ~40 ms mandado desde la pantalla). Aquí el filtro y el retardo
+     entre oídos se interpolan MUESTRA A MUESTRA dentro del propio procesador de audio: no hay cambio de filtro ni cruce, y no depende
+     de lo ocupada que esté la pantalla. Mismos HRIR del KU100, misma interpolación de 4 vecinos, misma ley de distancia. */
+  const W_TAPS=160,W_NAME="ku100-voz";
+  const W_CODE=`
+class KU extends AudioWorkletProcessor{
+  constructor(o){super();const q=o.processorOptions;Object.assign(this,q);const T=this.T;
+    this.hA=[new Float32Array(T),new Float32Array(T)];this.hB=[new Float32Array(T),new Float32Array(T)];this.dA=[0,0];this.dB=[0,0];
+    this.X=new Float32Array(1024);this.xi=0;this.D=[new Float32Array(256),new Float32Array(256)];this.wi=0;this.tg=null;this.cur=null;this.dead=false;this.still=0;
+    const PH=128;this.PH=PH;this.K=new Float32Array((PH+1)*8);
+    for(let p=0;p<=PH;p++){const fr=p/PH;let s=0;for(let j=-3;j<=4;j++){const x=j-fr,w=Math.abs(x)<4?.5+.5*Math.cos(Math.PI*x/4):0,v=(Math.abs(x)<1e-7?1:Math.sin(Math.PI*x)/(Math.PI*x))*w;this.K[p*8+j+3]=v;s+=v}for(let j=0;j<8;j++)this.K[p*8+j]/=s}
+    this.st=[0,0];this.port.onmessage=e=>{const m=e.data;if(m.stat){this.port.postMessage({st:this.st});return}if(m.stop){this.dead=true;return}if(m.p){const p=m.p.slice();if(this.cur)p[0]=this.cur[0]+((((p[0]-this.cur[0])%360)+540)%360-180);this.tg=p;this.at=m.at||0}}}
+  filt(P,h,d){const AZ=this.AZ,EL=this.EL,n=this.n,T=this.T,H=this.H,dl=this.dl,na=AZ.length;let az=((P[0]%360)+360)%360;if(az>=360-1e-9)az=0;
+    const el=Math.max(EL[0],Math.min(EL[EL.length-1],P[1])),r=P[2],i=Math.floor(az/15)%na,jx=(i+1)%na,fa=(az-AZ[i])/15;
+    let k=0;while(k<EL.length-2&&EL[k+1]<=el)k++;const fe=(el-EL[k])/(EL[k+1]-EL[k]);
+    const W=[k,i,(1-fe)*(1-fa),k,jx,(1-fe)*fa,k+1,i,fe*(1-fa),k+1,jx,fe*fa];h[0].fill(0);h[1].fill(0);let d0=0,d1=0;
+    const dg=Math.min(this.gmax,1/Math.max(.12,r))*this.kcal;
+    for(let q=0;q<12;q+=3){const g=W[q+2];if(!g)continue;const c=W[q]*na+W[q+1],b=c*2*n,gg=g*dg;const o0=h[0],o1=h[1];
+      for(let t=0;t<T;t++){o0[t]+=gg*H[b+t];o1[t]+=gg*H[b+n+t]}d0+=g*dl[c*2];d1+=g*dl[c*2+1]}
+    if(r<1){const lad=Math.sin(az*Math.PI/180);for(let ch=0;ch<2;ch++){const side=ch===1?lad:-lad,g=Math.pow(10,(1-r)*6*side/20*.5),o=h[ch];for(let t=0;t<24;t++)o[t]*=g}}
+    const m=Math.min(d0,d1);d[0]=d0-m;d[1]=d1-m}
+  // El bloque de audio puede ser de 128 muestras o mucho mayor (Orbital DJ pide 2048): se procesa siempre en tramos de 128.
+  process(inputs,outputs){const inp=inputs[0]&&inputs[0][0],out=outputs[0],NT=out[0].length;this.st[0]++;if(!inp)this.st[1]++;
+    for(let o=0;o<NT;o+=128)this.tramo(inp,out,o,Math.min(128,NT-o));return !this.dead}
+  tramo(inp,out,off,N){const X=this.X,T=this.T,xi=this.xi;
+    if(inp)for(let i=0;i<N;i++)X[(xi+i)&1023]=inp[off+i];else for(let i=0;i<N;i++)X[(xi+i)&1023]=0;
+    this.xi=(xi+N)&1023;
+    if(!this.tg){for(let ch=0;ch<out.length;ch++)for(let i=0;i<N;i++)out[ch][off+i]=0;return}
+    let mov=false;
+    if(!this.cur){this.cur=this.tg.slice();this.filt(this.cur,this.hA,this.dA)}
+    else{const c=this.cur,g=this.tg,dt=N/sampleRate,a=Math.min(1,dt/Math.max(.02,this.at-(currentFrame+off)/sampleRate));/* llega al punto pedido justo a su hora, a velocidad pareja */const e0=g[0]-c[0],e1=g[1]-c[1],e2=g[2]-c[2];
+      if(Math.abs(e0)>.01||Math.abs(e1)>.01||Math.abs(e2)>.0005){c[0]+=e0*a;c[1]+=e1*a;c[2]+=e2*a;this.filt(c,this.hB,this.dB);mov=true}}
+    const K=this.K,PH=this.PH,wi=this.wi;
+    for(let ch=0;ch<2;ch++){const a=this.hA[ch],b=this.hB[ch],D=this.D[ch],o=out[ch]||out[0],dA=this.dA[ch],dB=mov?this.dB[ch]:dA;
+      for(let i=0;i<N;i++){const base=xi+i;let ya=0;
+        if(mov){let yb=0;for(let t=0;t<T;t++){const x=X[(base-t)&1023];ya+=a[t]*x;yb+=b[t]*x}ya+=(yb-ya)*((i+1)/N)}
+        else for(let t=0;t<T;t++)ya+=a[t]*X[(base-t)&1023];
+        const w=(wi+i)&255;D[w]=ya;
+        const dd=dA+(dB-dA)*((i+1)/N)+4,di=dd|0,fp=(dd-di)*PH,p0=fp|0,f=fp-p0,k0=p0*8,k1=k0+8;let y=0;
+        for(let j=0;j<8;j++)y+=D[(w-di-j+3)&255]*(K[k0+j]+(K[k1+j]-K[k0+j])*f);
+        o[off+i]=y}}
+    this.wi=(wi+N)&255;
+    if(mov){const t=this.hA;this.hA=this.hB;this.hB=t;this.dA[0]=this.dB[0];this.dA[1]=this.dB[1]}}}
+registerProcessor("${W_NAME}",KU);`;
+  const W_OK=new WeakMap();
+  function prepare(ctx){if(!ctx.audioWorklet||!data())return Promise.resolve(false);let p=W_OK.get(ctx);
+    if(!p){const u=URL.createObjectURL(new Blob([W_CODE],{type:"text/javascript"}));p=ctx.audioWorklet.addModule(u).then(()=>{ctx._kuW=true;return true}).catch(e=>{console.warn("KU100 worklet",e);return false});W_OK.set(ctx,p)}return p}
+  function voiceW(ctx,dest,opt){const d=data();if(!d||!ctx._kuW||d.sr!==ctx.sampleRate)return null;
+    const input=ctx.createGain();input.channelCount=1;input.channelCountMode="explicit";input.channelInterpretation="speakers";
+    const node=new AudioWorkletNode(ctx,W_NAME,{numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[2],channelCount:1,channelCountMode:"explicit",channelInterpretation:"speakers",
+      processorOptions:{H:d.H,dl:Float32Array.from(d.dl),AZ:d.AZ,EL:d.EL,n:d.n,T:Math.min(W_TAPS,d.n),kcal:KCAL,gmax:opt&&opt.gmax||4}});
+    const out=ctx.createGain();input.connect(node);node.connect(out);out.connect(dest);let last=null;
+    function update(at,p){if(last&&Math.abs(p[0]-last[0])<.02&&Math.abs(p[1]-last[1])<.02&&Math.abs(p[2]-last[2])<.001)return;last=[p[0],p[1],p[2]];node.port.postMessage({p:last,at})}
+    function stop(){try{node.port.postMessage({stop:true})}catch(e){}try{out.disconnect()}catch(e){}try{input.disconnect()}catch(e){}}
+    return {input,out,update,stop,worklet:true,node}}
+  return {data,hrir,voice,voiceW,prepare,erIR:salaIR,get disponible(){return !!data()}};
 })();
 if(typeof module!=="undefined")module.exports=HEALING_KU100;
 
@@ -25752,7 +25823,7 @@ function ensureLive(){if(deck&&ctx)return deck;ctx=NATIVE?NATIVE.makeContext(ORB
         if(!previous||P.some((v,i)=>Math.abs(v-previous[i])>.0001)||web.duckL!==(dk?.[0]||0)||web.duckR!==(dk?.[1]||0)){
           web.port.postMessage({pose:spatialProfile(P,dk),at:t});web.lastPose=P.slice();web.duckL=dk?.[0]||0;web.duckR=dk?.[1]||0;
         }return}
-      const x=RV[id];if(!x||!x.v)return;for(const h of HOOKS.pos)try{P=h(id,P,t)||P}catch(e){}for(const h of HOOKS.capturePos)try{h(id,P,t)}catch(e){console.warn(e)}const L=x.v.last,d0=x.v.duck||[0,0];if(dk)x.v.duck=dk;
+      const x=RV[id];if(!x||!x.v)return;for(const h of HOOKS.pos)try{P=h(id,P,t)||P}catch(e){}if(x.ku)try{x.ku.update(t,P)}catch(e){}for(const h of HOOKS.capturePos)try{h(id,P,t)}catch(e){console.warn(e)}const L=x.v.last,d0=x.v.duck||[0,0];if(dk)x.v.duck=dk;
       if(L&&Math.abs(L[0]-P[0])<.02&&Math.abs(L[1]-P[1])<.02&&Math.abs(L[2]-P[2])<.002&&!(dk&&(Math.abs(dk[0]-d0[0])>.1||Math.abs(dk[1]-d0[1])>.1))){x.held=true;return}
       try{if(x.held&&L)vPos(x.v,Math.max(ctx.currentTime,x.lt||0),L,x.v.k||.7,false);x.held=false;vPos(x.v,t,P,x.v.k||.7,L!=null);x.lt=t}catch(e){deck.audioErrors=(deck.audioErrors||0)+1;deck.lastAudioError=String(e)}}});
   Object.assign(deck,{quant:deck0.quant,metro:deck0.metro});
@@ -25789,10 +25860,18 @@ function rowVoice(id){if(spatialModule){
 }if(NATIVE)return NATIVE.voice(id);let x=RV[id];if(x&&x.v&&x.s._v===x.v)return x.v;
   const s=ORB.newSource({kind:"file",label:"DJ · "+ROW[id].n,dj:true,vol_db:0,depth:.7,speed:.45,distance:.35,ren:"v10-a",path:{type:"still",az0:0,el:0}});
   const v=ORB.rtVoice(s);const t=ctx.currentTime;try{v.lvl.gain.cancelScheduledValues(t);v.lvl.gain.setTargetAtTime(1,t,.05)}catch(e){}
-  RV[id]={s,v};return v}
+  RV[id]={s,v};kuAttach(RV[id]);return v}
+/* 23 nov (Jorge: «implementar KU100 C a Orbital DJ 8D»): el sonido directo de cada pista del círculo pasa por el KU100 dentro del hilo de audio
+   (HEALING_KU100.voiceW, la versión «C» que aprobó); la sala sigue siendo la del motor. Nivel igualado al motor (+2,9 dB medido) y tope de
+   cercanía ×2. ?kuw=0 en la dirección vuelve al motor anterior. Pendiente: el «mute contrario» por oído no actúa sobre la rama KU. */
+const KUDJ=typeof location!=="undefined"&&!/[?&]kuw=0/.test(location.search);
+function kuBusDJ(){const M=ORB.M;if(M._kuDJ&&M._kuDJ.context===ctx)return M._kuDJ;const g=ctx.createGain();g.gain.value=Math.pow(10,2.9/20);g.connect(M.dry);return M._kuDJ=g}
+function kuAttach(x){if(!KUDJ||!x||x.ku||!ctx||!ctx._kuW||typeof HEALING_KU100==="undefined"||!HEALING_KU100.voiceW)return;
+  try{const v=x.v;if(!v||!v.oD||!v.pMg||!v.mono)return;const ku=HEALING_KU100.voiceW(ctx,kuBusDJ(),{gmax:2});if(!ku)return;v.oD.disconnect(ORB.M.dry);v.pMg.disconnect(ORB.M.dry);v.mono.connect(ku.input);x.ku=ku;if(v.last)ku.update(ctx.currentTime,v.last)}catch(e){console.warn("KU100 DJ",e)}}
+function kuPrepare(){if(!KUDJ||!ctx||typeof HEALING_KU100==="undefined"||!HEALING_KU100.prepare)return Promise.resolve(false);return HEALING_KU100.prepare(ctx).then(ok=>{if(ok)for(const x of Object.values(RV))kuAttach(x);return ok}).catch(()=>false)}
 // libera la voz 8D y la cadena de una pista callada (se vuelven a crear al lanzarla)
 function freeRow(id,ch){const web=webVoices.get(id);if(web){web.port.postMessage({stop:true});web.disconnect();web.port.close();webVoices.delete(id)}const dis=n=>{try{n&&n.disconnect&&n.disconnect()}catch(e){}};if(ch){for(const k of ["in","hp","lp","vol","drop","duck","head"])dis(ch[k]);if(ch.eq)for(const n of Object.values(ch.eq))dis(n)}
-  const x=RV[id];if(x){try{ORB.killVoice(x.s,.05)}catch(e){}delete RV[id]}}
+  const x=RV[id];if(x){try{ORB.killVoice(x.s,.05)}catch(e){}if(x.ku){const k=x.ku;setTimeout(()=>{try{k.stop()}catch(e){}},300)}delete RV[id]}}
 function freeVoices(){if(panel&&!panel.hidden)return;for(const id of webVoices.keys())freeRow(id,deck?.R[id]?.ch);for(const id of Object.keys(RV)){try{ORB.killVoice(RV[id].s,.1)}catch(e){}delete RV[id]}if(deck)for(const r of Object.values(deck.R))r.ch=null}
 
 // Canciones: una toma completa por pista, sin estirar, cuantizar ni repetir.
@@ -26089,7 +26168,7 @@ const _t={
   demoArr,renderArr,timeline,movPos,stretch,kitDemoArr,setKit,loadKits,get kits(){return KITS},get kit(){return KIT}};
 return {on:true,open,close,get deck(){return deck},demoArr,renderArr,PAD,ROWS,_t,sessionState,loadState,
   // piezas internas para módulos de Orbital DJ (IAH DJ, selector de kits): lectura y llamadas, sin copiar código
-  _k:{native:NATIVE,freeWebRow:freeRow,prepareSpatial,get webSpatialVoices(){return webVoices.size},spatialProfile,audioStats:()=>NATIVE?({backend:"Benzai C++ / WASAPI",voices:NATIVE.status?.activeVoices||0,spatial:NATIVE.status?.spatialVoices||0,bufferBytes:NATIVE.status?.pcmBytes||0,audioErrors:NATIVE.error?1:0,renderOverruns:NATIVE.status?.renderOverruns||0,wasapi:NATIVE.status?.wasapi||null}):({voices:Object.keys(RV).length,benzai:Object.values(RV).filter(x=>x.v.benzai).length,processorErrors:Object.values(RV).filter(x=>x.v.benzaiError).length,audioErrors:deck?.audioErrors||0,lastAudioError:deck?.lastAudioError||null,bufferBytes:Object.values(STEMBUF).reduce((n,b)=>n+b.length*b.numberOfChannels*4,0)}),stems,E8A_N,e8Bus,e8Espacio,e8Post,e8Bandas,E8_REF,tmap,e8sSesion,e8sCargar,e8sMezcla,TRAMOS,tramoPos,HOOKS,SYN,KH,BAKE,SC_DEF,kicksOf,clubMaster,clubBake,bandsOf,lufsOf,meterOf,PAD,PADS_OF,ROWS,ROW,CAT,CYC,MOVS,SPEED,ICO,BASE_BPM,movPos,movCopy,speedTip,bufFor,bufNow,libPad,renderArr,timeline,tmap,demoArr,ensureLive,padNum,E,say,toast,paint,exportFile,sessionState,loadState,
+  _k:{native:NATIVE,freeWebRow:freeRow,prepareSpatial,kuPrepare,get webSpatialVoices(){return webVoices.size},spatialProfile,audioStats:()=>NATIVE?({backend:"Benzai C++ / WASAPI",voices:NATIVE.status?.activeVoices||0,spatial:NATIVE.status?.spatialVoices||0,bufferBytes:NATIVE.status?.pcmBytes||0,audioErrors:NATIVE.error?1:0,renderOverruns:NATIVE.status?.renderOverruns||0,wasapi:NATIVE.status?.wasapi||null}):({voices:Object.keys(RV).length,benzai:Object.values(RV).filter(x=>x.v.benzai).length,processorErrors:Object.values(RV).filter(x=>x.v.benzaiError).length,audioErrors:deck?.audioErrors||0,lastAudioError:deck?.lastAudioError||null,bufferBytes:Object.values(STEMBUF).reduce((n,b)=>n+b.length*b.numberOfChannels*4,0)}),stems,E8A_N,e8Bus,e8Espacio,e8Post,e8Bandas,E8_REF,tmap,e8sSesion,e8sCargar,e8sMezcla,TRAMOS,tramoPos,HOOKS,SYN,KH,BAKE,SC_DEF,kicksOf,clubMaster,clubBake,bandsOf,lufsOf,meterOf,PAD,PADS_OF,ROWS,ROW,CAT,CYC,MOVS,SPEED,ICO,BASE_BPM,movPos,movCopy,speedTip,bufFor,bufNow,libPad,renderArr,timeline,tmap,demoArr,ensureLive,padNum,E,say,toast,paint,exportFile,sessionState,loadState,
     restoreArrangement(a){CLUB=a?.arr?.club===true;if(deck)deck.A=a},
     get deck(){return deck},get lastArr(){return lastArr},set lastArr(a){lastArr=a},get panel(){return panel}}}})();
 /* ==== LAB_DJ_FIN ==== */
@@ -27406,7 +27485,7 @@ function create(B){
   }catch(e){if(early&&early===EP)earlyKill();if(e===STALE||!live())return;pv?.stop();library.value=sourceChoice;message("No se pudo abrir "+song.name+": "+e.message)}finally{if(token===loadingToken){loading=false;loadAbort=null;paint()}}}
  async function playSong(){if(loading&&typeof DJ_RAPIDO!=="undefined"&&DJ_RAPIDO.active){DJ_RAPIDO.stop();return}if(loading||!tracks.length||state==="playing")return;const request=++playRequest,d=K.ensureLive();
   if(scorePending){message("IAH está escuchando las pistas…");await scorePending;if(request!==playRequest||loading||!tracks.length||state==="playing")return}
-  try{await d.c.resume();if(tracks.length>=16)await K.prepareSpatial(d.c)}catch(e){message("No se pudo abrir el audio: "+e.message);paint();return}
+  try{await d.c.resume();if(tracks.length>=16)await K.prepareSpatial(d.c);else if(K.kuPrepare)await K.kuPrepare()}catch(e){message("No se pudo abrir el audio: "+e.message);paint();return}
   if(request!==playRequest||loading||state==="playing")return;
   const extras=Object.values(d.R).filter(r=>!r.song&&(r.cur||r.pend?.pad)).length;
   if(K.native&&extras+tracks.length>36){message("Hay "+extras+" pads activos: detén algunos para no superar 36 sonidos simultáneos.");return}
