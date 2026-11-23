@@ -6322,7 +6322,7 @@ function buildMaster(c,o={}){const m={ctx:c,rt:!(c instanceof OfflineAudioContex
   m.lim=c.createDynamicsCompressor();m.lim.threshold.value=-3;m.lim.knee.value=1;m.lim.ratio.value=20;m.lim.attack.value=.002;m.lim.release.value=.12;/* el umbral va BAJO el recorte de seguridad (rodilla −4,5…−2,8 dBFS): con −1,5 el recorte trabajaba y «clipeaba». Release 120 ms (antes 180) */
   m.limOn=c.createGain();m.limOff=c.createGain();m.limOff.gain.value=0;m.out=c.createGain();
   m.hd=c.createGain();m.hd.gain.value=o.hd==null?1:o.hd;m.agc=c.createGain();m.genius=c.createGain();
-  m.in.connect(m.hd);m.hd.connect(m.agc);m.agc.connect(m.genius);m.genius.connect(m.vol);
+  m.in.connect(m.hd);m.hd.connect(m.agc);m.agc.connect(m.genius);/* 23 nov (Jorge: «el volumen general está muy bajo»): +25 % (+1,9 dB) en vivo, antes del limitador; las exportaciones no cambian */m.mas=c.createGain();m.mas.gain.value=m.rt?1.25:1;m.genius.connect(m.mas);m.mas.connect(m.vol);
   // El Master de JUGAR cubre la mezcla y el fondo sin mover el volumen del proyecto.
   let limiterInput=m.vol;
   if(m.rt){
@@ -22702,7 +22702,7 @@ const FREQUENCY_BATH=(()=>{
     const height=h("input",{type:"range",min:-1.2,max:1.2,step:.05,value:0,"aria-label":"Altura"});
     const useKind=h("strong",{}),useText=h("p",{}),evidence=h("span",{class:"freq-evidence"});
     const setInfo=s=>{const I=infoOf(s.hz);title.textContent=`${s.hz.toFixed(1)} Hz · ${noteOf(s.hz)}`;hzOut.textContent=s.hz.toFixed(1)+" Hz";hz.value=hzNumber.value=s.hz;vol.value=s.db;move.value=s.move;speed.value=s.speed;height.value=s.height;useKind.textContent=I.kind;useText.textContent=I.text;evidence.textContent=I.evidence};
-    function ac(){if(ctx)return ctx;ctx=new (window.AudioContext||window.webkitAudioContext)({sampleRate:48000});master=ctx.createGain();master.gain.value=.72;const lim=ctx.createDynamicsCompressor();lim.threshold.value=-6;lim.knee.value=6;lim.ratio.value=12;lim.attack.value=.005;lim.release.value=.18;master.connect(lim).connect(ctx.destination);return ctx}
+    function ac(){if(ctx)return ctx;ctx=new (window.AudioContext||window.webkitAudioContext)({sampleRate:48000});master=ctx.createGain();master.gain.value=.9/* 23 nov: +25 % */;const lim=ctx.createDynamicsCompressor();lim.threshold.value=-6;lim.knee.value=6;lim.ratio.value=12;lim.attack.value=.005;lim.release.value=.18;master.connect(lim).connect(ctx.destination);return ctx}
     function audioOn(s){const c=ac();if(s.osc)return;const o=c.createOscillator(),g=c.createGain(),p=c.createPanner();o.type="sine";o.frequency.value=s.hz;g.gain.value=0;p.panningModel="HRTF";p.distanceModel="inverse";p.refDistance=.7;p.maxDistance=12;p.rolloffFactor=.65;o.connect(g).connect(p).connect(master);o.start();g.gain.setValueAtTime(0,c.currentTime);g.gain.linearRampToValueAtTime(10**(s.db/20),c.currentTime+.12);Object.assign(s,{osc:o,gain:g,panner:p});setPosition(s)}
     function audioOff(s){if(!s.osc)return;const t=ctx.currentTime;s.gain.gain.cancelScheduledValues(t);s.gain.gain.setValueAtTime(s.gain.gain.value,t);s.gain.gain.linearRampToValueAtTime(0,t+.08);try{s.osc.stop(t+.1)}catch(e){}setTimeout(()=>{for(const n of [s.osc,s.gain,s.panner])try{n.disconnect()}catch(e){}s.osc=s.gain=s.panner=null},130)}
     function setPosition(s){if(!s.panner)return;const scale=3/Math.max(1,Math.hypot(s.x,s.y)),X=s.x*scale,Z=s.y*scale,Y=s.height;const t=ctx.currentTime;for(const [p,v] of [[s.panner.positionX,X],[s.panner.positionY,Y],[s.panner.positionZ,Z]])p.setTargetAtTime(v,t,.035)}
@@ -27704,7 +27704,8 @@ function changeMotionSpeed(t,s,b,P){const m=motionState(t),d=K.deck,bar=motionCu
 
 function basePos(t,b,ts){if(t.man)return t.man;const d=K.deck,R=d&&d.R[t.eng],time=d?d.c.currentTime+(ts==null?0:ts-performance.now()/1000):0;
   const group=t.groupKey&&SONG?.groupPosition(t,time);if(group)return group;
-  const manual=manualMotionPos(t,b,ts);if(manual)return manual;
+  // 23 nov: en Auto · IAH manda IAH. Antes el movimiento propio del pad (p. ej. los de una sesión de IAH DJ) tapaba a IAH y en Auto no se movía nada.
+  const manual=S.movMode==="iah"&&t.ctl==="iah"&&IAHS.frase&&!t.song?null:manualMotionPos(t,b,ts);if(manual)return manual;
   // partitura del criterio: se lee en el instante PROGRAMADO de la voz (no en «ahora»), así la posición llega a tiempo
   // y una pausa del hilo principal no deja posiciones viejas con sello nuevo (que se oirían como un salto)
   if(S.movMode==="iah"&&t.ctl==="iah"&&t.song&&t.autoScore){const scored=SONG?.scoredPosition(t,time);if(scored)return scored}
@@ -28936,6 +28937,9 @@ function iahStep(){
   }
   IAHS.b=b;
   const tracks=allTracks().filter(t=>t.clips.some(Boolean)&&isLive(t));
+  // 23 nov: IAH «escucha» cada pista por el medidor de su canal. En una sesión de IAH DJ los canales se creaban sin medidor,
+  // IAH oía silencio, creía que todo era un «break» y dejaba los sonidos quietos. Aquí se asegura el canal completo (neutro) de cada pista.
+  for(const t of tracks){const R=d.R[t.eng];if(R&&!R.ch?.eq){try{chainFor(t);applyEq(t);applyFilt(t);applyVol(t)}catch(_){}}}
   const rel=Math.max(0,b-IAHS.origin);
   if(now-IAHS.measureAt>=105){
     IAHS.measureAt=now;
@@ -29393,7 +29397,7 @@ function init(){try{
     document.addEventListener("click",e=>{const f=e.target.closest&&e.target.closest(".ldj-fab");if(f){e.preventDefault();e.stopImmediatePropagation();open()}},true);
     addEventListener("keydown",onKey,true);addEventListener("keyup",onKey,true);let lastMob=isMob();addEventListener("resize",()=>{const m=isMob();if(m!==lastMob){lastMob=m;S.bank=0;renderGrid();renderStrips()}closeMenu();requestAnimationFrame(fitSpace)})}catch(e){console.warn("Orbital DJ UI",e)}}
 if(document.readyState==="complete")setTimeout(init,60);else addEventListener("load",()=>setTimeout(init,60));
-return {on:true,resizeSpace(){const r=ov?.getBoundingClientRect();if(!r)return;try{PLAY.resize()}catch(e){}const dpr=Math.min(1,devicePixelRatio||1);OVW=r.width;ov.width=Math.round(r.width*dpr);ov.height=Math.round(r.height*dpr)},resetRecordedSpatial,applyRecordedFx(f){Object.assign(S.fx,f);applyFx()},get songs(){return SONG},iahEscena,_pos:i=>{const t=S.tracks[i];return [basePos(t,nowBar()),posOf(t,nowBar()),t.state.play]},get _rol(){return Object.keys(ROLMAP).length},open,close,S,ROOM,API,setKit,styleSet,get _iso(){return ISO},setBank,setTab,escena,uiState,uiLoad,setMovMode,setPro,padPress,selectPadMovement,openPadPicker,setPadVolume,setMixChannel,fader,knob,selTrack,setMovFor,startDraw,recMov,launchSlot,switchTo,isMoving,IAHS,
+return {on:true,resizeSpace(){const r=ov?.getBoundingClientRect();if(!r)return;try{PLAY.resize()}catch(e){}const dpr=Math.min(1,devicePixelRatio||1);OVW=r.width;ov.width=Math.round(r.width*dpr);ov.height=Math.round(r.height*dpr)},resetRecordedSpatial,applyRecordedFx(f){Object.assign(S.fx,f);applyFx()},get songs(){return SONG},iahEscena,_pos:i=>{const t=S.tracks[i];return [basePos(t,nowBar()),posOf(t,nowBar()),t.state.play]},_posDe:t=>posOf(t,nowBar()),get _rol(){return Object.keys(ROLMAP).length},open,close,S,ROOM,API,setKit,styleSet,get _iso(){return ISO},setBank,setTab,escena,uiState,uiLoad,setMovMode,setPro,padPress,selectPadMovement,openPadPicker,setPadVolume,setMixChannel,fader,knob,selTrack,setMovFor,startDraw,recMov,launchSlot,switchTo,isMoving,IAHS,
   circleTracks,get circleReady(){return circleReady},setCircleTrackSelected,setSelected,setDist,setAlt,setMixEq,setFx,setDiv,stopAll,
   _moving:()=>S.tracks.filter(t=>t.clips.some(Boolean)&&isLive(t)&&isMoving(t)).map(t=>t.id),_br:{mkBr,setBr,brGains,BR_LO,BR_HI},
   _demo(o={}){/* solo para capturas sin audio: marca pistas sonando y en cola, y opcionalmente inclina la sala */const T=S.tracks;
@@ -31730,7 +31734,8 @@ async function load8D(it,{profile=true}={}){
   return {prof,vocal}})();profP.catch(()=>{})}
  if(!await waitScores(60000,tok))throw Error("IAH no terminó la partitura de "+it.name);
  chk(tok);
- U().setMovMode("iah");
+ // 23 nov: si el DJ puso «Manual» durante el set, DJ solo no lo devuelve a Auto al cargar la canción siguiente
+ if(!(S.iahMio&&U().S.movMode==="libre"))U().setMovMode("iah");S.iahMio=true;
  if(!profile)return;
  const pv=await profP;chk(tok);it.prof=pv.prof;it.vocal=pv.vocal;
 }
@@ -31872,6 +31877,8 @@ async function run8D(){
    if(style==="barrido"){br.hp.frequency.setValueAtTime(900,T0);br.hp.frequency.exponentialRampToValueAtTime(20,Tsw)}}
   const Tend=T0+Math.max(10,(bridge.duration-off0)/Math.max(.9,r0))-1;
   const bp=bridgePath({T0,Tsw:T0+(style==="corte_eco"?Math.min(4,L/2):L/2)*barA,T1,Tend,azMeet,barA});br.path=bp.out;
+  // 23 nov: con «Manual» puesto, el tema que entra tampoco se mueve: llega quieto al punto de encuentro
+  if(S.iahMio&&U().S.movMode==="libre"){const q=bp.out.find(p=>p[0]>=T0)||bp.out[0];if(q)bp.out=bp.out.map(p=>[p[0],azMeet,q[2],q[3],p[4]]);br.path=bp.out}
   const nPts=await br.program(bp.out);chk(tok);entry.puente_8d=nPts+" posiciones programadas · figuras: "+bp.figs.slice(0,6).join(", ");
   // al quedar solo, el puente vuelve a su tempo y tono originales en 8 compases (como quien suelta el pitch)
   const Tr0=T1+barA,Tr1=Tr0+8*barB;br.src.playbackRate.setValueAtTime(r0,Tr0);br.src.playbackRate.linearRampToValueAtTime(1,Tr1);
@@ -31965,7 +31972,7 @@ async function start(o={}){
  chk(tok);
  }catch(e){S.starting=false;kill(tok);if(e===CANCEL)return "Cancelé DJ solo antes de empezar.";throw e}
  S.starting=false;
- Object.assign(S,{forceStyles:Array.isArray(o.styles)?o.styles.filter(x=>STYLES[x]):null,armed:false,summary:null,on:true,mode,set,i:0,log:[],manual:new Set(),stopReq:false,started:performance.now(),minutes,per:o.per||Math.max(60,minutes*60/set.length),styleLast:null,phase:"",now:null,next:null,mixAt:null,record:!!o.record});
+ Object.assign(S,{forceStyles:Array.isArray(o.styles)?o.styles.filter(x=>STYLES[x]):null,armed:false,summary:null,on:true,iahMio:false,mode,set,i:0,log:[],manual:new Set(),stopReq:false,started:performance.now(),minutes,per:o.per||Math.max(60,minutes*60/set.length),styleLast:null,phase:"",now:null,next:null,mixAt:null,record:!!o.record});
  monitor();S.timer=setInterval(liveLine,500);
  note("DJ solo"+(mode==="8d"?" 8D":"")+" · "+set.length+" temas · ~"+minutes+" min · "+set.map(x=>x.name+" ("+Math.round(x.bpm)+(x.key?", "+x.key:"")+")").join(" → ")+(mode==="8d"?". IAH Auto mueve las pistas; yo elijo temas y transiciones.":"."));
  if(S.record){masterRecStart();if(typeof LAB_DJ_MULTITRACK!=="undefined"&&!LAB_DJ_MULTITRACK.recording)setTimeout(()=>{void LAB_DJ_MULTITRACK.start();note("Grabando el set.")},400)}
@@ -35521,6 +35528,10 @@ const DJ_EDITOR_PISTAS=(()=>{
 </script>
 <style>
 @media (min-width:1600px){#ldjx[data-console-view="dj"]:not([data-workspace="decks"]) .ldx-w-pad-toolbar .ldx-legacy-pad-bank{bottom:190px}}
+</style>
+<style>
+/* 23 nov: el botón BENZAI (consola interna de ingeniería) no se muestra en las apps públicas */
+body[data-orb-app] #pDeskBenzai{display:none!important}
 </style>
 </body>
 </html>
