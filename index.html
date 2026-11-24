@@ -35638,6 +35638,8 @@ const DJ_VISTA_ANCHA=(()=>{
   if(mixer._cfTop==null){mixer.classList.remove("djx-cf-arriba");const mt=mixer.getBoundingClientRect().top,top=Math.round(deb.getBoundingClientRect().top-mt),m0=parseFloat(getComputedStyle(deb).marginTop)||0;
    mixer._cfTop=top;mixer._cfM=Math.round(m0+70)}
   mixer.style.setProperty("--djx-cf-top",mixer._cfTop+"px");mixer.style.setProperty("--djx-cf-m",mixer._cfM+"px");mixer.classList.add("djx-cf-arriba")}
+ // 24 nov (Jorge: «¿qué son esos píxeles?»): la línea de ayuda «Agrega tus canciones…» bajo los decks asomaba cortada sobre el teclado de pads; la ayuda fija se oculta, los avisos reales se siguen mostrando
+ setInterval(()=>{const s=document.querySelector("#ldjx .ldx-deck-status");if(s){const ayuda=/^\s*Agrega tus canciones/.test(s.textContent);if(s.hidden!==ayuda)s.hidden=ayuda}},500);
  setInterval(paso,500);addEventListener("resize",()=>{const m=document.querySelector("#ldjx .ldx-deck-mixer");if(m)m._cfTop=null;paso()})})();
 </script>
 <style>/* Editor de pistas (23 nov 2026) */
