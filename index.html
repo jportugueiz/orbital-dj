@@ -35455,7 +35455,12 @@ const ORB_APPS=(()=>{
         E("div",{class:"oapp-cards oapp-one"},card("dj","Abrir la consola","El DJ espacial 3D por instrumento.")));
   document.body.append(home);
   // 23 nov (Jorge): en ORBITAL DJ la portada sobra: se abre la consola directo. Si la consola no está lista en 10 s, queda la portada como respaldo.
-  if(app==="dj"){home.style.visibility="hidden";const t0=Date.now();const go=()=>{if(typeof LAB_DJ_UI!=="undefined"&&LAB_DJ_UI.on&&LAB_DJ_UI.open){try{LAB_DJ_UI.open();setTimeout(()=>document.documentElement.classList.remove("orb-cubre"),250);return}catch(e){}}if(Date.now()-t0<15000)setTimeout(go,150);else{home.style.visibility="";document.documentElement.classList.remove("orb-cubre")}};const later=()=>setTimeout(()=>window.requestIdleCallback?requestIdleCallback(go,{timeout:3000}):go(),1500);if(document.readyState==="complete")later();else addEventListener("load",later,{once:true})}
+  // 24 nov (Jorge: «aprete Modo fácil, lo cerré y me llevó a una página que ya no existe»): en ORBITAL DJ la consola nunca se cierra.
+  // «Salir» del modo fácil vuelve a la consola completa; y si algo la cerrara igual, se reabre al instante bajo la pantalla de carga.
+  function guardDJ(){if(guardDJ.on)return;guardDJ.on=true;
+   try{const orig=LAB_DJ_UI.close;LAB_DJ_UI.close=function(){try{if(typeof DJ_SIMPLE!=="undefined"&&DJ_SIMPLE.active){DJ_SIMPLE.set(false);return}}catch(e){}/* en la app DJ no hay nada detrás de la consola */};LAB_DJ_UI._closeOrig=orig}catch(e){}
+   setInterval(()=>{const ld=document.getElementById("ldjx");if(ld&&(ld.hidden||!document.body.classList.contains("ldjx-open"))){document.documentElement.classList.add("orb-cubre");try{LAB_DJ_UI.open()}catch(e){}setTimeout(()=>document.documentElement.classList.remove("orb-cubre"),300)}},300)}
+  if(app==="dj"){home.style.visibility="hidden";const t0=Date.now();const go=()=>{if(typeof LAB_DJ_UI!=="undefined"&&LAB_DJ_UI.on&&LAB_DJ_UI.open){try{LAB_DJ_UI.open();setTimeout(()=>document.documentElement.classList.remove("orb-cubre"),250);guardDJ();return}catch(e){}}if(Date.now()-t0<15000)setTimeout(go,150);else{home.style.visibility="";document.documentElement.classList.remove("orb-cubre")}};const later=()=>setTimeout(()=>window.requestIdleCallback?requestIdleCallback(go,{timeout:3000}):go(),1500);if(document.readyState==="complete")later();else addEventListener("load",later,{once:true})}
   // en la portada, la barra espaciadora no debe arrancar nada que esté detrás
   const onTop=()=>{const x=document.elementFromPoint(innerWidth/2,innerHeight/2);return !!(x&&x.closest("#oappHome"))};
   addEventListener("keydown",e=>{if(e.code==="Space"&&onTop()&&!/INPUT|TEXTAREA|SELECT|BUTTON/.test(e.target.tagName))e.stopImmediatePropagation()},true);
