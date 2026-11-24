@@ -35430,6 +35430,16 @@ const ORB_APPS=(()=>{
   #ldjx.djva .djva-head button{width:100%;min-width:0;font-size:10px;white-space:normal;line-height:1.15;padding-left:3px;padding-right:3px}
 }
 #ldjx[data-console-view="dj"] .ldx-w-work-head{padding-top:2px;padding-bottom:2px;min-height:0}
+/* 24 nov (Jorge): botonera izquierda pareja: todos los botones movidos con la misma forma que los de arriba, y la columna con scroll para que ninguno quede tapado */
+@media (min-width:1600px){
+  #ldjx.djva .ldx-w-nav{overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:#3b4a55 transparent;padding-bottom:8px}
+  #ldjx.djva .ldx-w-nav > :is(.djva-head,.ldx-deck-tools){gap:8px!important;margin-top:8px!important}
+  #ldjx.djva .ldx-w-nav > :is(.djva-head,.ldx-deck-tools) > *{gap:8px!important}
+  #ldjx.djva .ldx-w-nav > :is(.djva-head,.ldx-deck-tools) :is(button,select,label){box-sizing:border-box!important;width:100%!important;min-height:44px!important;margin:0!important;padding:6px 8px!important;display:flex!important;align-items:center!important;justify-content:center!important;text-align:center!important;font:600 11px/1.2 inherit!important;letter-spacing:.015em!important;white-space:normal!important;border:1px solid #080d12!important;border-top-color:#53616c!important;background:linear-gradient(#2c3945,#18232d 50%,#131c25)!important;box-shadow:0 3px 0 #05090e,0 4px 5px #0007,inset 0 1px 0 #b5c6cd22!important;border-radius:7px!important;color:#a9bbc7!important}
+  #ldjx.djva .ldx-w-nav > :is(.djva-head,.ldx-deck-tools) label:has(select){display:contents!important}
+  #ldjx.djva .ldx-w-nav > :is(.djva-head,.ldx-deck-tools) select{font-size:10px!important;padding:4px 3px!important;text-overflow:ellipsis;text-align-last:center;appearance:none;-webkit-appearance:none;cursor:pointer}
+  #ldjx.djva .ldx-w-nav > :is(.djva-head,.ldx-deck-tools) :is(button,label):hover{color:#dfeaf0!important;border-top-color:#6c7c88!important}
+}
 </style>
 <script>/* ORBITAL DJ · vista ancha de Decks A/B (23 nov 2026, pedido de Jorge: los decks completos sin scroll, sin achicar nada).
    En pantallas de 1600 px o más y en la vista DJ:
