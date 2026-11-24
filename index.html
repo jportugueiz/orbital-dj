@@ -35351,6 +35351,8 @@ const ORB_APPS=(()=>{
     :E("main",{id:"oappHome",class:"oapp-home","aria-label":"ORBITAL DJ"},logo,E("h1",{},"ORBITAL ",E("em",{},"DJ")),hp,
         E("div",{class:"oapp-cards oapp-one"},card("dj","Abrir la consola","El DJ espacial 3D por instrumento.")));
   document.body.append(home);
+  // 23 nov (Jorge): en ORBITAL DJ la portada sobra: se abre la consola directo. Si la consola no está lista en 10 s, queda la portada como respaldo.
+  if(app==="dj"){home.style.visibility="hidden";const t0=Date.now();const go=()=>{if(typeof LAB_DJ_UI!=="undefined"&&LAB_DJ_UI.on&&LAB_DJ_UI.open){try{LAB_DJ_UI.open();return}catch(e){}}if(Date.now()-t0<10000)setTimeout(go,150);else home.style.visibility=""};if(document.readyState==="complete")setTimeout(go,0);else addEventListener("load",()=>setTimeout(go,0),{once:true})}
   // en la portada, la barra espaciadora no debe arrancar nada que esté detrás
   const onTop=()=>{const x=document.elementFromPoint(innerWidth/2,innerHeight/2);return !!(x&&x.closest("#oappHome"))};
   addEventListener("keydown",e=>{if(e.code==="Space"&&onTop()&&!/INPUT|TEXTAREA|SELECT|BUTTON/.test(e.target.tagName))e.stopImmediatePropagation()},true);
