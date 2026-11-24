@@ -32720,6 +32720,8 @@ function refreshPads(){if(!padGrid||!padFamily)return;const fold=padGrid.closest
    if(ds.length>=2&&g.width>0){const gap=12,ca=ds[0].getBoundingClientRect(),cb=ds[1].getBoundingClientRect(),dw=Math.min(ca.width,cb.width),w=Math.max(80,Math.floor((dw*.92-3*gap)/4)),bw=4*w+3*gap,
      a=(ca.left+ca.width/2)-g.left-bw/2,b=(cb.left+cb.width/2)-(ca.left+ca.width/2)-bw;
      if(a>gap&&b>2*gap){padGrid.style.setProperty("--p2-w",w+"px");padGrid.style.setProperty("--p2-l",Math.round(a-gap)+"px");padGrid.style.setProperty("--p2-m",Math.round(b-2*gap)+"px")}}
+   // 24 nov (Jorge): debajo del teclado en reposo no puede quedar nada tapado: la consola reserva abajo el alto de la barra + la primera fila
+   {const host=padRack.parentElement,res=Math.max(0,innerHeight-padsTopMax());if(host&&host._p2res!==res){host._p2res=res;host.style.paddingBottom=res+"px";host.style.boxSizing="border-box"}}
    let top=parseInt(padRack.style.top);if(!(top>0))top=padsTopMax();// 24 nov (Jorge): SIEMPRE parte abajo, mostrando solo la primera fila (no se recuerda la posición entre aperturas)
    padRack.style.top=Math.max(56,Math.min(padsTopMax(),top))+"px"});
  if(compact3)requestAnimationFrame(()=>{const l=padRack.querySelector(".ldx-w-pad-bank");if(l&&l.offsetParent){const r=l.getBoundingClientRect();document.documentElement.style.setProperty("--pads3-bank-bottom",Math.round(innerHeight-r.top-r.height/2-11)+"px")}});
@@ -35582,6 +35584,56 @@ const DJ_VISTA_ANCHA=(()=>{
   setInterval(paso,400);mq.addEventListener?.("change",paso);
   return {on:true,paso};
 })();
+</script>
+<style>/* 24 nov (Jorge): Decks A/B: el fader de Nivel de cada canal va a su deck (espacio libre junto a «Al pulso»);
+   donde estaba, en el mezclador, va el crossfader grande de lado a lado (así el teclado de pads nunca lo tapa) */
+#ldjx .ldx-deck-transport.djx-con-nivel{position:relative}
+#ldjx .djx-nivel{position:absolute;right:0;top:0;bottom:-14px;z-index:2;display:grid;grid-template-columns:auto auto;align-content:center;justify-items:center;column-gap:10px;row-gap:5px;padding:4px 14px;
+  border:1px solid #2f4350;border-radius:10px;background:linear-gradient(180deg,#15212a,#0c141a);box-shadow:inset 0 1px 0 #ffffff10}
+#ldjx .djx-nivel .djx-pfl{grid-column:1/-1;min-width:112px;min-height:28px;height:28px;font-weight:700;margin:0}
+#ldjx .djx-qrow{position:absolute;display:flex;gap:8px;z-index:2}
+#ldjx .djx-qrow button{min-height:30px}
+#ldjx .djx-nivel .ldx-deck-fader{display:grid;justify-items:center;gap:4px;font:700 11px system-ui,sans-serif;color:var(--deck-led,#9fe)}
+#ldjx .djx-nivel .ldx-deck-fader input[type=range]{height:84px!important;width:28px!important}
+#ldjx .djx-nivel meter{writing-mode:vertical-lr;direction:rtl;width:10px;height:84px;align-self:end}
+#ldjx .ldx-deck-mixer.djx-cf-arriba{position:relative}
+/* letras A y B del mezclador en las esquinas: las perillas suben */
+#ldjx .ldx-deck-mixer > .ldx-deck-mix{position:relative}
+#ldjx .ldx-deck-mixer > .ldx-deck-mix .ldx-deck-knob{height:44px;--s:38px}
+#ldjx .ldx-deck-mixer .djfx-slot{gap:2px!important;padding-top:2px!important;padding-bottom:2px!important}
+#ldjx .ldx-deck-mixer > .ldx-deck-mix > b{position:absolute;top:-6px;left:0;right:0;text-align:center;font:800 13px/1 system-ui,sans-serif;z-index:1;pointer-events:none}
+
+#ldjx .ldx-deck-mixer.djx-cf-arriba .ldx-deck-cross{position:absolute;left:10px;right:10px;top:var(--djx-cf-top,330px);height:58px;z-index:3;display:flex;align-items:center;gap:10px;padding:6px 12px;
+  border:1px solid #2f4350;border-radius:10px;background:linear-gradient(180deg,#16222b,#0c141a);box-shadow:inset 0 1px 0 #ffffff12,0 3px 8px #0008}
+#ldjx .ldx-deck-mixer.djx-cf-arriba .ldx-deck-cross b{font:800 18px/1 system-ui,sans-serif;color:#cfe6ea;min-width:16px;text-align:center}
+#ldjx .ldx-deck-mixer.djx-cf-arriba .ldx-deck-cross input[type=range]{-webkit-appearance:none;appearance:none;background:transparent;flex:1;height:40px;margin:0;cursor:ew-resize}
+#ldjx .ldx-deck-mixer.djx-cf-arriba .ldx-deck-cross input[type=range]::-webkit-slider-runnable-track{height:8px;border-radius:4px;background:linear-gradient(90deg,#3fe6ee55,#0b1116 50%,#ff9d4255);box-shadow:inset 0 1px 2px #000}
+#ldjx .ldx-deck-mixer.djx-cf-arriba .ldx-deck-cross input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:30px;height:40px;margin-top:-16px;border-radius:5px;border:1px solid #05080b;
+  background:linear-gradient(90deg,#8b969d,#e9eef1 45%,#cfd6da 55%,#7d878e);box-shadow:inset 0 0 0 1px #ffffff55,0 2px 5px #000a}
+#ldjx .ldx-deck-mixer.djx-cf-arriba .ldx-deck-cross input[type=range]::-moz-range-thumb{width:30px;height:40px;border-radius:5px;background:linear-gradient(90deg,#8b969d,#e9eef1 45%,#cfd6da 55%,#7d878e)}
+#ldjx .ldx-deck-mixer.djx-cf-arriba .djx-cf-debajo{margin-top:var(--djx-cf-m,70px)!important}
+</style>
+<script>(()=>{if(typeof document==="undefined")return;
+ function paso(){const root=document.querySelector("#ldjx");if(!root)return;const mixer=root.querySelector(".ldx-deck-mixer");if(!mixer||!mixer.offsetParent)return;
+  const mixes=[...mixer.querySelectorAll(":scope > .ldx-deck-mix")],decks=[...root.querySelectorAll(".ldx-deck")].filter(e=>e.offsetParent),cross=mixer.querySelector(".ldx-deck-cross");
+  if(mixes.length<2||decks.length<2||!cross)return;
+  let movido=false;
+  mixes.forEach((mx,i)=>{const fl=mx.querySelector(":scope > .ldx-deck-fader"),me=mx.querySelector(":scope > meter"),tr=decks[i].querySelector(".ldx-deck-transport");
+   if(fl&&tr){let w=tr.querySelector(":scope > .djx-nivel");if(!w){w=document.createElement("div");w.className="djx-nivel";tr.append(w);tr.classList.add("djx-con-nivel")}w.append(fl);if(me)w.append(me);movido=true}
+   // «Audífonos» de este canal va bajo su fader de Nivel, en el deck
+   const pfl=[...mx.querySelectorAll(":scope > button")].find(b=>/Audífonos/.test(b.textContent)),w2=tr&&tr.querySelector(":scope > .djx-nivel");if(pfl&&w2){pfl.classList.add("djx-pfl");w2.append(pfl);movido=true}
+   // «Q · Cuantizar» y «✎ Borrar» pasan debajo de «Al pulso»
+   const head=decks[i].querySelector(".djp-cues-head"),line=tr&&[...tr.querySelectorAll(":scope > .ldx-deck-line")].find(l=>/Al pulso/.test(l.textContent));
+   if(head&&line){let q=tr.querySelector(":scope > .djx-qrow");if(!q){q=document.createElement("div");q.className="djx-qrow";tr.append(q)}
+    [...head.querySelectorAll(":scope > button")].forEach(b=>q.append(b));q.style.left=line.offsetLeft+"px";q.style.top=(line.offsetTop+line.offsetHeight+8)+"px"}});
+  if(movido)mixer._cfTop=null;
+  // lo primero que queda bajo las perillas deja espacio para el crossfader
+  const deb=[...mixes[0].children].find(e=>e.offsetParent&&!e.classList.contains("ldx-deck-knob")&&e.tagName!=="B");if(!deb)return;
+  mixes.forEach(mx=>{const d=[...mx.children].find(e=>e.offsetParent&&!e.classList.contains("ldx-deck-knob")&&e.tagName!=="B");mx.querySelectorAll(":scope > .djx-cf-debajo").forEach(e=>{if(e!==d)e.classList.remove("djx-cf-debajo")});if(d)d.classList.add("djx-cf-debajo")});
+  if(mixer._cfTop==null){mixer.classList.remove("djx-cf-arriba");const mt=mixer.getBoundingClientRect().top,top=Math.round(deb.getBoundingClientRect().top-mt),m0=parseFloat(getComputedStyle(deb).marginTop)||0;
+   mixer._cfTop=top;mixer._cfM=Math.round(m0+70)}
+  mixer.style.setProperty("--djx-cf-top",mixer._cfTop+"px");mixer.style.setProperty("--djx-cf-m",mixer._cfM+"px");mixer.classList.add("djx-cf-arriba")}
+ setInterval(paso,500);addEventListener("resize",()=>{const m=document.querySelector("#ldjx .ldx-deck-mixer");if(m)m._cfTop=null;paso()})})();
 </script>
 <style>/* Editor de pistas (23 nov 2026) */
 .ldj-dlg.djed{max-width:min(1500px,96vw);width:96vw;max-height:92vh;display:flex;flex-direction:column;gap:8px}
