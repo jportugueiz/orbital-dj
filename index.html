@@ -6105,7 +6105,7 @@ let cctx=null;
 function cInit(){if(cctx)return;const AC=window.AudioContext||window.webkitAudioContext;
   try{if(navigator.audioSession)navigator.audioSession.type="playback"}catch(e){}
   // Prioriza una salida estable cuando coinciden audio espacial y render 3D.
-  let dj=false;try{const q=new URLSearchParams(location.search);dj=["dj","orbitaldj"].some(k=>q.has(k)&&!["0","no","false","off"].includes(String(q.get(k)).toLowerCase()))}catch(_){}
+  let dj=false;try{const q=new URLSearchParams(location.search);dj=window.ORB_APP==="dj"||document.body?.classList.contains("ldjx-open")||["dj","orbitaldj"].some(k=>q.has(k)&&!["0","no","false","off"].includes(String(q.get(k)).toLowerCase()))}catch(_){}
   // «Baja latencia» (ronda 2, 21 nov 2026): opción del DJ para cue, scratch y pads (bloques de 128 y búfer mínimo del sistema).
   // Apagada (por defecto) queda «Máxima estabilidad»: 250 ms y bloques de 2048, como siempre. Se elige en Decks A/B y recarga.
   let low=false;try{low=dj&&localStorage.getItem("orbdj_latencia")==="baja"}catch(_){}
@@ -30559,10 +30559,7 @@ const LAB_DJ_DECKS = (() => {
     },{class:"ldx-btn ldx-lat","aria-pressed":String(lowNow),title:"Encendido: menos retraso (para cue y scratch). Apagado: máxima estabilidad."});
     const latPaint=()=>{try{const c=ORB.ac();latOut.textContent="Salida ≈ "+Math.round(((c.baseLatency||0)+(c.outputLatency||0))*1000)+" ms"}catch(_){}};
     setInterval(()=>{if(!panel.hidden)latPaint()},1000);
-    const rec=button("● Grabar set",()=>{
-      if(LAB_DJ_MULTITRACK.busy)return;
-      void (LAB_DJ_MULTITRACK.recording?LAB_DJ_MULTITRACK.finish():LAB_DJ_MULTITRACK.start());
-    });
+    const rec=button("● Grabar",()=>DJ_REC_ESTEREO.toggle(),{title:"Grabar la salida estéreo final de los decks"});
     const x=range("Crossfader",0,1,.001,.5,value=>{cross=value;void updateMix()});crossInput=x;
     const [left,right]=decks.map(deckPanel);
     const mixer=el("section",{class:"ldx-deck-mixer","aria-label":"Mezcla A/B"},
@@ -30585,9 +30582,9 @@ const LAB_DJ_DECKS = (() => {
           void run(d,()=>pause(d));
       }
       if(panel.hidden||panel.closest("#ldjx")?.hidden)return;
-      rec.disabled=LAB_DJ_MULTITRACK.busy;
-      rec.textContent=LAB_DJ_MULTITRACK.recording?"■ Terminar toma":"● Grabar set";
-      rec.setAttribute("aria-pressed",String(!!LAB_DJ_MULTITRACK.recording));
+      const capturing=DJ_REC_ESTEREO.recording;
+      rec.textContent=capturing?"■ Terminar grabación":"● Grabar";
+      rec.setAttribute("aria-pressed",String(capturing));
       for(const d of decks){paint(d);draw(d);if(d.buffer)d.ui.seek.max=d.buffer.duration;}
     },70);
   }
@@ -33392,9 +33389,13 @@ const DJ_BIBLIO=(()=>{
     const man=JSON.parse(await (await S.asset(def.manifest)).text()),ctx=new OfflineAudioContext(2,1,48000);let sum=null,k=0;
     for(const t of man.tracks){say("Preparando "+it.name+" en estéreo · "+(++k)+"/"+man.tracks.length+"…");
       const b=await ctx.decodeAudioData(await (await S.asset(t.file)).arrayBuffer());
-      if(!sum)sum=new AudioBuffer({numberOfChannels:2,length:b.length,sampleRate:b.sampleRate});
+      if(!sum||sum.length<b.length){
+        const extended=new AudioBuffer({numberOfChannels:2,length:b.length,sampleRate:b.sampleRate});
+        if(sum)for(let c=0;c<2;c++)extended.copyToChannel(sum.getChannelData(c),c);
+        sum=extended;
+      }
       for(let c=0;c<2;c++){const x=b.getChannelData(Math.min(c,b.numberOfChannels-1)),y=sum.getChannelData(c),n=Math.min(x.length,y.length);for(let i=0;i<n;i++)y[i]+=x[i]}}
-    let pk=0;for(let c=0;c<2;c++){const y=sum.getChannelData(c);for(let i=0;i<y.length;i+=4){const a=Math.abs(y[i]);if(a>pk)pk=a}}
+    let pk=0;for(let c=0;c<2;c++){const y=sum.getChannelData(c);for(let i=0;i<y.length;i++){const a=Math.abs(y[i]);if(a>pk)pk=a}}
     const g=pk>.89?.89/pk:1;if(g<1)for(let c=0;c<2;c++){const y=sum.getChannelData(c);for(let i=0;i<y.length;i++)y[i]*=g}
     const m=META[it.id]||{};return {key:"orbital:"+it.id,name:it.name,buffer:sum,bpm:m.bpm||null,gridAt:m.gridAt||0};
   }
@@ -33471,7 +33472,7 @@ const DJ_BIBLIO=(()=>{
     root.addEventListener("drop",e=>{e.preventDefault();const n=P.addFiles(e.dataTransfer.files).length;say(n+" archivo(s) agregados.");draw();if(n)void analyzeAll()});
     (document.getElementById("ldjx")||document.body).append(root);
   }
-  function open(deck){if(!root)build();root.hidden=false;if(deck==="A"||deck==="B"){const other=deck==="A"?"B":"A",od=P.decks.find(x=>x.name===other);if(od?.pro?.key?.camelot)compat.value=other;say("Elige una canción para el Deck "+deck+".")}void P.libraryReady?.then(()=>draw());draw();setTimeout(()=>q.focus({preventScroll:true}),30)}
+  function open(deck){if(!root)build();root.hidden=false;if(deck==="A"||deck==="B"){say("Elige una canción para el Deck "+deck+".")}void P.libraryReady?.then(()=>draw());draw();setTimeout(()=>q.focus({preventScroll:true}),30)}
   function close(){if(root)root.hidden=true}
   // Botón en la cabecera de la consola
   try{DJ_PRO.menuAdd?.("♫ Biblioteca","Abrir biblioteca",()=>open())}catch(_){}
