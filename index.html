@@ -35625,9 +35625,20 @@ const DJ_REC_ESTEREO=(()=>{if(typeof document==="undefined"||typeof ORB==="undef
   const bytes=r.frames*6,head=new ArrayBuffer(44),dv=new DataView(head),str=(o,s)=>{for(let i=0;i<s.length;i++)dv.setUint8(o+i,s.charCodeAt(i))};
   str(0,"RIFF");dv.setUint32(4,36+bytes,true);str(8,"WAVEfmt ");dv.setUint32(16,16,true);dv.setUint16(20,1,true);dv.setUint16(22,2,true);dv.setUint32(24,r.sr,true);dv.setUint32(28,r.sr*6,true);dv.setUint16(32,6,true);dv.setUint16(34,24,true);str(36,"data");dv.setUint32(40,bytes,true);
   const blob=new Blob([head,...r.chunks],{type:"audio/wav"}),dur=r.frames/r.sr,item={id:"rec_"+Date.now(),name:r.name,duration:dur,createdAt:new Date().toISOString(),blob};
-  let guardada=true;try{await db.run("readwrite",s=>s.put(item))}catch(e){guardada=false}
-  const a=document.createElement("button");a.className="ldx-btn djx-guardar";a.textContent="⬇ Descargar WAV";a.onclick=()=>descargar(item);
-  toast([document.createTextNode((guardada?"Grabación guardada en este equipo · ":"No hubo espacio para guardarla en este equipo; descárgala ahora · ")+fmt(dur)+" · "+r.name+"  "),a]);lista()}
+  let guardada=true,err="";try{await db.run("readwrite",s=>s.put(item));const chk=await db.run("readonly",s=>s.get(item.id));if(!chk)throw Error("no quedó")}catch(e){guardada=false;err=e&&(e.name||e.message)||""}
+  // 25 nov (Jorge: «el aviso de descargar se sale solo y la canción no se guardó»): ventana fija que no se cierra sola;
+  // si el navegador no la pudo guardar, se descarga AL TIRO para que nunca se pierda
+  if(!guardada)descargar(item);
+  ventana(item,guardada,err);lista()}
+ function ventana(item,guardada,err){document.getElementById("djxRecFin")?.remove();
+  const bg=document.createElement("div");bg.id="djxRecFin";bg.className="djx-nombre";const box=document.createElement("div");box.className="djx-nombre-box";box.setAttribute("role","dialog");
+  const t=document.createElement("b");t.textContent=guardada?"Grabación guardada":"Grabación descargada";
+  const p=document.createElement("p");p.textContent=guardada?"Quedó en este equipo, en ◉ Grabación → «Grabaciones (lo que sonó)». Duración "+fmt(item.duration)+".":"Este navegador no la dejó guardar ("+(err||"sin espacio")+"), así que se descargó como WAV en tu carpeta de Descargas. Duración "+fmt(item.duration)+".";
+  const inp=document.createElement("input");inp.type="text";inp.value=item.name;inp.setAttribute("aria-label","Nombre de la grabación");
+  const row=document.createElement("div");row.className="djx-nombre-row";
+  const dl=document.createElement("button");dl.className="ldx-btn djx-guardar";dl.textContent="⬇ Descargar WAV";dl.onclick=()=>{item.name=inp.value.trim()||item.name;descargar(item)};
+  const ok=document.createElement("button");ok.className="ldx-btn";ok.textContent="Listo";ok.onclick=async()=>{const n=inp.value.trim();if(n&&n!==item.name&&guardada){item.name=n;try{await db.run("readwrite",s=>s.put(item))}catch(_){}lista()}bg.remove()};
+  row.append(dl,ok);box.append(t,p,inp,row);bg.append(box);document.body.append(bg);setTimeout(()=>inp.select(),30)}
  function descargar(item){const u=URL.createObjectURL(item.blob),a=document.createElement("a");a.href=u;a.download=(item.name||"Grabacion").replace(/[<>:"/\\|?*]/g,"_")+".wav";document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),60000)}
  function paint(){for(const b of document.querySelectorAll(".ldx-rec")){b.setAttribute("aria-pressed",String(!!rec));b.classList.toggle("on",!!rec);b.textContent=rec?"■ Terminar "+fmt((Date.now()-rec.t0)/1000):"● Grabar";b.title=rec?"Terminar y guardar la grabación":"Graba lo que suena (salida estéreo final)"}}
  setInterval(()=>{if(rec)paint()},500);
