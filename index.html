@@ -27473,7 +27473,10 @@ function create(B){
  section.addEventListener("dragleave",()=>section.classList.remove("drag"));
  section.addEventListener("drop",e=>{e.preventDefault();section.classList.remove("drag");if(e.dataTransfer.files.length)importFiles([...e.dataTransfer.files])});
  B.mount(section);
- function message(s){status=s;note.textContent=s}
+ function message(s){status=s;note.textContent=s;
+  // 25 nov: los avisos de carga se ven siempre (antes quedaban al fondo del panel y parecía que «no hacía nada»)
+  try{let t=document.getElementById("ldxSongToast");if(!t){t=document.createElement("div");t.id="ldxSongToast";t.setAttribute("role","status");document.body.append(t)}
+   t.textContent=s;t.className="mostrar";clearTimeout(t._h);t._h=setTimeout(()=>{t.className=""},/^(Abriendo|Leyendo)/.test(s)?60000:6500)}catch(_){}}
  function barAt(time){return state==="playing"&&K.deck?K.deck.barAt(time):barCursor}
  function current(){if(state!=="playing")return offset;const d=K.deck,head=K.native&&tracks[0]?K.native.playhead(tracks[0].eng):null;if(head!=null)return clamp(head,0,duration);return clamp(offset+Math.max(0,(d?d.c.currentTime:started)-when),0,duration)}
  function paint(){section.classList.toggle("ldx-song-unloaded",!tracks.length);if(!scrub){progress.value=current();time.textContent=fmt(current())+" / "+fmt(duration)}play.textContent=loading?"Cargando…":state==="playing"?"Ⅱ Pausa":tracks.length&&!ready?"Preparando…":"▶ Play";play.classList.toggle("lista",!loading&&ready&&tracks.length>0&&state!=="playing");play.classList.toggle("prep",!loading&&!ready&&tracks.length>0&&state!=="playing");progress.disabled=play.disabled=stop.disabled=save.disabled=loading||!tracks.length;fresh.disabled=loading||!tracks.length;add.disabled=library.disabled=loading;B.sync()}
@@ -35590,6 +35593,8 @@ const DJ_VISTA_ANCHA=(()=>{
   return {on:true,paso};
 })();
 </script>
+<style>#ldxSongToast{position:fixed;left:50%;top:84px;transform:translateX(-50%) translateY(-8px);z-index:2147483000;max-width:min(680px,90vw);padding:10px 18px;border-radius:10px;border:1px solid #3d6070;background:#0d1a21f2;color:#e6f6fa;font:600 14px/1.4 system-ui,sans-serif;box-shadow:0 10px 28px #000a;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
+#ldxSongToast.mostrar{opacity:1;transform:translateX(-50%) translateY(0)}</style>
 <style>/* 24 nov (Jorge): Decks A/B: el fader de Nivel de cada canal va a su deck (espacio libre junto a «Al pulso»);
    donde estaba, en el mezclador, va el crossfader grande de lado a lado (así el teclado de pads nunca lo tapa) */
 #ldjx .ldx-deck-transport.djx-con-nivel{position:relative}
@@ -35679,11 +35684,15 @@ const DJ_ZIP=(()=>{
     const buf=await file.arrayBuffer(),u8=new Uint8Array(buf),dv=new DataView(buf),out=[];
     let e=-1;for(let i=u8.length-22;i>=Math.max(0,u8.length-66000);i--)if(dv.getUint32(i,true)===0x06054b50){e=i;break}
     if(e<0)throw new Error("El archivo "+file.name+" no es un ZIP válido.");
-    const n=dv.getUint16(e+10,true);let p=dv.getUint32(e+16,true);
-    if(p===0xffffffff)throw new Error("El ZIP "+file.name+" es demasiado grande (ZIP64). Divídelo en dos.");
+    let n=dv.getUint16(e+10,true),p=dv.getUint32(e+16,true);
+    // 25 nov (Jorge: «seleccioné un zip con pistas y no hizo nada»): ZIP64, el formato que usan Windows/Mac/estudios para zips grandes
+    if((p===0xffffffff||n===0xffff)&&e>=20&&dv.getUint32(e-20,true)===0x07064b50){const z=Number(dv.getBigUint64(e-12,true));
+      if(dv.getUint32(z,true)!==0x06064b50)throw new Error("El ZIP "+file.name+" está dañado.");n=Number(dv.getBigUint64(z+32,true));p=Number(dv.getBigUint64(z+48,true))}
     for(let k=0;k<n&&p+46<=u8.length;k++){
       if(dv.getUint32(p,true)!==0x02014b50)break;
-      const flags=dv.getUint16(p+8,true),method=dv.getUint16(p+10,true),csize=dv.getUint32(p+20,true),nl=dv.getUint16(p+28,true),xl=dv.getUint16(p+30,true),cl=dv.getUint16(p+32,true),lo=dv.getUint32(p+42,true);
+      const flags=dv.getUint16(p+8,true),method=dv.getUint16(p+10,true),nl=dv.getUint16(p+28,true),xl=dv.getUint16(p+30,true),cl=dv.getUint16(p+32,true);let csize=dv.getUint32(p+20,true),usize=dv.getUint32(p+24,true),lo=dv.getUint32(p+42,true);
+      if(csize===0xffffffff||usize===0xffffffff||lo===0xffffffff){let q=p+46+nl;const qe=q+xl;while(q+4<=qe){const id=dv.getUint16(q,true),sz=dv.getUint16(q+2,true);if(id===1){let r=q+4;
+        if(usize===0xffffffff){usize=Number(dv.getBigUint64(r,true));r+=8}if(csize===0xffffffff){csize=Number(dv.getBigUint64(r,true));r+=8}if(lo===0xffffffff){lo=Number(dv.getBigUint64(r,true));r+=8}break}q+=4+sz}}
       const name=new TextDecoder(flags&0x800?"utf-8":"latin1").decode(u8.subarray(p+46,p+46+nl));p+=46+nl+xl+cl;
       const base=name.split("/").pop();
       if(!base||name.endsWith("/")||base.startsWith(".")||name.includes("__MACOSX/")||!AUDIO.test(base))continue;
