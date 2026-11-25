@@ -27620,7 +27620,7 @@ function create(B){
    if(t.automation&&globalThis.ORBITAL_DJ_WORKSPACE?.viewMode!=="dj"){const route=button("Ruta",()=>B.restoreRoute(t),"ldx-song-route");route.title="Recuperar el recorrido original de "+t.name;route.setAttribute("aria-label","Ruta original de "+t.name);row.insertBefore(route,row.lastChild)}list.append(row)});syncSelection()}
  async function refreshLibrary(){try{saved=await db.run("readonly",s=>s.getAll());const choice=library.value;library.replaceChildren(...libraryOptions());library.value=choice}catch(e){message("La biblioteca local no está disponible; puedes cargar y reproducir tus pistas.")}}
  async function saveProject(){if(!tracks.length||loading)return;const record={id:projectId||"song_"+Date.now(),title:title||"Mi canción",stems:tracks.filter(t=>!t.derivado).map(t=>({name:t.name,blob:t.blob,fileName:t.fileName,automation:t.automation,printedMix:t.printedMix,automationFinal:t.automationFinal,takeId:t.takeId,settings:settings(t)}))};
-  try{await db.run("readwrite",s=>s.put(record));sourceChoice=projectId=record.id;await refreshLibrary();library.value=projectId;message("Canción guardada en este equipo.")}catch(e){message("No se pudo guardar en este equipo. Tus pistas siguen cargadas.")}}
+  try{await db.run("readwrite",s=>s.put(record));sourceChoice=projectId=record.id;await refreshLibrary();library.value=projectId;message("Canción guardada en este equipo.")}catch(e){console.warn("Guardar canción",e);const q=e&&(e.name==="QuotaExceededError"||/quota/i.test(String(e&&e.message)));message(q?"No hay espacio para guardar esta canción en este navegador (en una ventana InPrivate el espacio es muy chico). Tus pistas siguen cargadas.":"No se pudo guardar en este equipo ("+((e&&(e.name||e.message))||"error")+"). Tus pistas siguen cargadas.")}}
  async function loadSaved(id,{reveal=true}={}){if(loading)return;const record=saved.find(s=>s.id===id);if(!record)return;pause();loading=true;paint();message("Abriendo "+record.title+"…");
   try{const data=[];for(const stem of record.stems){if(!stem.blob)throw new Error("Falta el audio de "+stem.name);data.push({...stem,buffer:await decode(await stem.blob.arrayBuffer())})}install(data,record.title,id,{reveal});prepareCriterionScore(tracks,null)}catch(e){library.value=sourceChoice;message("No se pudo abrir: "+e.message)}finally{loading=false;paint()}}
  function groupPosition(t,ctxTime){const l=leader(t);if(!l||l===t||!t.groupOffset||t.man)return null;
@@ -35594,7 +35594,7 @@ const DJ_VISTA_ANCHA=(()=>{
 })();
 </script>
 <style>#ldxSongToast{position:fixed;left:50%;top:84px;transform:translateX(-50%) translateY(-8px);z-index:2147483000;max-width:min(680px,90vw);padding:10px 18px;border-radius:10px;border:1px solid #3d6070;background:#0d1a21f2;color:#e6f6fa;font:600 14px/1.4 system-ui,sans-serif;box-shadow:0 10px 28px #000a;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
-#ldxSongToast.mostrar{opacity:1;transform:translateX(-50%) translateY(0)}</style>
+#ldxSongToast.mostrar{opacity:1;transform:translateX(-50%) translateY(0)}#ldjx .djx-guardar{background:linear-gradient(180deg,#1f8f86,#13615b)!important;border-color:#58eee0!important;color:#eafffb!important;font-weight:700}</style>
 <style>/* 24 nov (Jorge): Decks A/B: el fader de Nivel de cada canal va a su deck (espacio libre junto a «Al pulso»);
    donde estaba, en el mezclador, va el crossfader grande de lado a lado (así el teclado de pads nunca lo tapa) */
 #ldjx .ldx-deck-transport.djx-con-nivel{position:relative}
@@ -35643,6 +35643,9 @@ const DJ_VISTA_ANCHA=(()=>{
   if(mixer._cfTop==null){mixer.classList.remove("djx-cf-arriba");const mt=mixer.getBoundingClientRect().top,top=Math.round(deb.getBoundingClientRect().top-mt),m0=parseFloat(getComputedStyle(deb).marginTop)||0;
    mixer._cfTop=top;mixer._cfM=Math.round(m0+70)}
   mixer.style.setProperty("--djx-cf-top",mixer._cfTop+"px");mixer.style.setProperty("--djx-cf-m",mixer._cfM+"px");mixer.classList.add("djx-cf-arriba")}
+ // 25 nov (Jorge: «no veo el botón guardar»): «Guardar canción» estaba escondido dentro de «Gestionar canción»; pasa a la fila de «＋ Cargar pistas», a la vista
+ setInterval(()=>{const add=[...document.querySelectorAll("#ldjx button")].find(b=>/^＋ Cargar pistas$/.test(b.textContent.trim()));if(!add)return;const sv=[...document.querySelectorAll("#ldjx button")].find(b=>b.textContent.trim()==="Guardar canción"||b.classList.contains("djx-guardar"));
+  if(sv&&sv.parentElement!==add.parentElement){sv.classList.add("djx-guardar");sv.textContent="💾 Guardar";sv.title="Guardar esta canción con sus pistas en este equipo";add.after(sv)}},600);
  // 24 nov (Jorge: «¿qué son esos píxeles?»): la línea de ayuda «Agrega tus canciones…» bajo los decks asomaba cortada sobre el teclado de pads; la ayuda fija se oculta, los avisos reales se siguen mostrando
  setInterval(()=>{const s=document.querySelector("#ldjx .ldx-deck-status");if(s){const ayuda=/^\s*Agrega tus canciones/.test(s.textContent);if(s.hidden!==ayuda)s.hidden=ayuda}},500);
  setInterval(paso,500);addEventListener("resize",()=>{const m=document.querySelector("#ldjx .ldx-deck-mixer");if(m)m._cfTop=null;paso()})})();
