@@ -28515,7 +28515,7 @@ function nudgeBpm(n){K.panel?.querySelector(n<0?'.ldj-tempo [aria-label="Bajar t
 function setQuant(v){S.quant=v;const d=K.deck;if(d)d.quant=quantVal();save()}
 function toggleMetro(){K.panel?.querySelector(".ldj-metro")?.click();S.metro=!S.metro;root.querySelectorAll(".ldx-metro").forEach(b=>b.setAttribute("aria-pressed",String(S.metro)))}
 function exportDjWav(){if(SONG&&SONG.hasTracks){K.toast("La exportación WAV admite los pads. Usa Guardar canción para conservar las pistas de Canciones.");return}clickOld(".ldj-tools .ldj-btn:nth-child(3)")}
-function toggleRec(){if(typeof LAB_DJ_MULTITRACK!=="undefined"&&LAB_DJ_MULTITRACK.on){if(LAB_DJ_MULTITRACK.busy){K.toast("Todavía estoy guardando la toma anterior. Espera a que diga «Toma guardada» y vuelve a grabar.");return}LAB_DJ_MULTITRACK.recording?LAB_DJ_MULTITRACK.finish():LAB_DJ_MULTITRACK.start();return}if(SONG&&SONG.hasTracks){K.toast("Para conservar estas pistas y sus ajustes usa Guardar canción. La grabación de sesión admite los pads.");return}K.panel?.querySelector(".ldj-rec")?.click();S.rec=!!K.deck?.rec;root.querySelectorAll(".ldx-rec").forEach(b=>{b.setAttribute("aria-pressed",String(S.rec));b.classList.toggle("on",S.rec);b.textContent=S.rec?"■ Terminar":"● Grabar"})}
+function toggleRec(){if(typeof DJ_REC_ESTEREO!=="undefined"&&DJ_REC_ESTEREO.on){DJ_REC_ESTEREO.toggle();return}if(typeof LAB_DJ_MULTITRACK!=="undefined"&&LAB_DJ_MULTITRACK.on){if(LAB_DJ_MULTITRACK.busy){K.toast("Todavía estoy guardando la toma anterior. Espera a que diga «Toma guardada» y vuelve a grabar.");return}LAB_DJ_MULTITRACK.recording?LAB_DJ_MULTITRACK.finish():LAB_DJ_MULTITRACK.start();return}if(SONG&&SONG.hasTracks){K.toast("Para conservar estas pistas y sus ajustes usa Guardar canción. La grabación de sesión admite los pads.");return}K.panel?.querySelector(".ldj-rec")?.click();S.rec=!!K.deck?.rec;root.querySelectorAll(".ldx-rec").forEach(b=>{b.setAttribute("aria-pressed",String(S.rec));b.classList.toggle("on",S.rec);b.textContent=S.rec?"■ Terminar":"● Grabar"})}
 // IAH DJ CREATIONS dentro de ORBITAL DJ (pedido de Jorge, 15 nov): sus canciones se escuchan aquí; al tocar una se detiene el beat
 let CREA=null,CREA_ID="";
 function abrirCreations(anchor){const L=(ORB.BEDS||[]).filter(b=>b&&b.cat==="dj"&&b.file);if(!L.length){K.toast("No encontré canciones IAH DJ creations");return}
@@ -35604,6 +35604,51 @@ const DJ_VISTA_ANCHA=(()=>{
   return {on:true,paso};
 })();
 </script>
+<script>/* 25 nov 2026 (Jorge: «necesitamos la toma de lo que escuchamos»): ● REC graba la SALIDA ESTÉREO FINAL — exactamente lo que suena
+   (8D, KU100, efectos, limitador) — en tiempo real, sin consolidar nada. Al terminar queda guardada en este equipo (WAV 24 bits)
+   y se puede descargar al tiro. La toma multipista sigue disponible aparte en ◉ Grabación. */
+const DJ_REC_ESTEREO=(()=>{if(typeof document==="undefined"||typeof ORB==="undefined")return {on:false};
+ let rec=null,node=null,ready=null;const toast=s=>{try{let t=document.getElementById("ldxSongToast");if(!t){t=document.createElement("div");t.id="ldxSongToast";t.setAttribute("role","status");document.body.append(t)}t.innerHTML="";t.append(...(Array.isArray(s)?s:[s]));t.className="mostrar";clearTimeout(t._h);t._h=setTimeout(()=>{t.className=""},Array.isArray(s)?20000:7000)}catch(_){}};
+ const CODE=`class R extends AudioWorkletProcessor{constructor(){super();this.on=false;this.n=0;this.L=new Float32Array(8192);this.R=new Float32Array(8192);this.port.onmessage=e=>{this.on=!!e.data.on;if(!this.on&&this.n){this.flush()}}}
+  flush(){this.port.postMessage([this.L.slice(0,this.n),this.R.slice(0,this.n)]);this.n=0}
+  process(i){const a=i[0];if(this.on&&a&&a[0]){const l=a[0],r=a[1]||a[0];this.L.set(l,this.n);this.R.set(r,this.n);this.n+=l.length;if(this.n+128>this.L.length)this.flush()}return true}}registerProcessor("orb-rec-estereo",R)`;
+ const db={p:null,open(){return this.p||(this.p=new Promise((ok,no)=>{const r=indexedDB.open("orbital_dj_grabaciones",1);r.onupgradeneeded=()=>r.result.createObjectStore("rec",{keyPath:"id"});r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)}))},
+  async run(m,fn){const d=await this.open();return new Promise((ok,no)=>{const tx=d.transaction("rec",m),q=fn(tx.objectStore("rec"));tx.oncomplete=()=>ok(q&&q.result);tx.onerror=()=>no(tx.error);tx.onabort=()=>no(tx.error)})}};
+ async function prep(){const c=ORB.ac();if(!ready)ready=c.audioWorklet.addModule(URL.createObjectURL(new Blob([CODE],{type:"text/javascript"})));await ready;
+  if(!node){node=new AudioWorkletNode(c,"orb-rec-estereo",{numberOfInputs:1,numberOfOutputs:0,channelCount:2,channelCountMode:"explicit"});
+   node.port.onmessage=e=>{if(!rec)return;const [l,r]=e.data,n=l.length,b=new Uint8Array(n*6);let o=0;for(let i=0;i<n;i++){for(const v0 of [l[i],r[i]]){let v=Math.round(Math.max(-1,Math.min(1,v0))*8388607);if(v<0)v+=16777216;b[o++]=v&255;b[o++]=(v>>8)&255;b[o++]=(v>>16)&255}}rec.chunks.push(b);rec.frames+=n}}
+  return node}
+ const fmt=s=>Math.floor(s/60)+":"+String(Math.floor(s%60)).padStart(2,"0");
+ async function start(){if(rec)return;try{const c=ORB.ac();await c.resume();const n=await prep();ORB.M.out.connect(n);rec={chunks:[],frames:0,sr:c.sampleRate,t0:Date.now(),name:"Set "+new Date().toLocaleString("es-CL",{dateStyle:"short",timeStyle:"short"}).replace(/[\/:]/g,"-")};n.port.postMessage({on:true});paint();toast("● Grabando lo que suena (salida estéreo). Aprieta ■ Terminar para guardar.")}catch(e){rec=null;paint();toast("No se pudo empezar a grabar: "+(e&&e.message||e))}}
+ async function finish(){if(!rec)return;const r=rec;node.port.postMessage({on:false});await new Promise(x=>setTimeout(x,250));try{ORB.M.out.disconnect(node)}catch(_){}rec=null;paint();
+  if(r.frames<r.sr*.2){toast("La grabación quedó vacía: no sonaba nada.");return}
+  const bytes=r.frames*6,head=new ArrayBuffer(44),dv=new DataView(head),str=(o,s)=>{for(let i=0;i<s.length;i++)dv.setUint8(o+i,s.charCodeAt(i))};
+  str(0,"RIFF");dv.setUint32(4,36+bytes,true);str(8,"WAVEfmt ");dv.setUint32(16,16,true);dv.setUint16(20,1,true);dv.setUint16(22,2,true);dv.setUint32(24,r.sr,true);dv.setUint32(28,r.sr*6,true);dv.setUint16(32,6,true);dv.setUint16(34,24,true);str(36,"data");dv.setUint32(40,bytes,true);
+  const blob=new Blob([head,...r.chunks],{type:"audio/wav"}),dur=r.frames/r.sr,item={id:"rec_"+Date.now(),name:r.name,duration:dur,createdAt:new Date().toISOString(),blob};
+  let guardada=true;try{await db.run("readwrite",s=>s.put(item))}catch(e){guardada=false}
+  const a=document.createElement("button");a.className="ldx-btn djx-guardar";a.textContent="⬇ Descargar WAV";a.onclick=()=>descargar(item);
+  toast([document.createTextNode((guardada?"Grabación guardada en este equipo · ":"No hubo espacio para guardarla en este equipo; descárgala ahora · ")+fmt(dur)+" · "+r.name+"  "),a]);lista()}
+ function descargar(item){const u=URL.createObjectURL(item.blob),a=document.createElement("a");a.href=u;a.download=(item.name||"Grabacion").replace(/[<>:"/\\|?*]/g,"_")+".wav";document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),60000)}
+ function paint(){for(const b of document.querySelectorAll(".ldx-rec")){b.setAttribute("aria-pressed",String(!!rec));b.classList.toggle("on",!!rec);b.textContent=rec?"■ Terminar "+fmt((Date.now()-rec.t0)/1000):"● Grabar";b.title=rec?"Terminar y guardar la grabación":"Graba lo que suena (salida estéreo final)"}}
+ setInterval(()=>{if(rec)paint()},500);
+ // lista de grabaciones estéreo dentro de ◉ Grabación
+ async function lista(){const sec=document.querySelector("#ldjx .ldx-multitrack");if(!sec)return;let box=document.getElementById("djxRecLista");
+  if(!box){box=document.createElement("div");box.id="djxRecLista";box.className="djx-rec-lista";sec.before(box)}
+  let items=[];try{items=await db.run("readonly",s=>s.getAll())}catch(_){}items.sort((a,b)=>b.createdAt.localeCompare(a.createdAt));box.innerHTML="";
+  const h=document.createElement("b");h.textContent="GRABACIONES (LO QUE SONÓ)";box.append(h);
+  if(!items.length){const p=document.createElement("p");p.textContent="Aún no hay grabaciones. Aprieta ● Grabar arriba.";box.append(p);return}
+  for(const it of items){const row=document.createElement("div");row.className="djx-rec-fila";const t=document.createElement("span");t.textContent=it.name+" · "+fmt(it.duration);
+   const pl=document.createElement("button");pl.className="ldx-btn";pl.textContent="▶ Escuchar";let au=null;pl.onclick=()=>{if(au){au.pause();au=null;pl.textContent="▶ Escuchar";return}au=new Audio(URL.createObjectURL(it.blob));au.play();pl.textContent="■ Parar";au.onended=()=>{au=null;pl.textContent="▶ Escuchar"}};
+   const dl=document.createElement("button");dl.className="ldx-btn";dl.textContent="⬇ WAV";dl.onclick=()=>descargar(it);
+   const del=document.createElement("button");del.className="ldx-btn";del.textContent="Borrar";del.onclick=async()=>{if(!confirm("¿Borrar «"+it.name+"» de este equipo?"))return;await db.run("readwrite",s=>s.delete(it.id));lista()};
+   row.append(t,pl,dl,del);box.append(row)}}
+ setTimeout(lista,3000);
+ return {on:true,toggle(){rec?finish():start()},get recording(){return !!rec},lista};
+})();
+</script>
+<style>.djx-rec-lista{display:grid;gap:6px;margin:0 0 12px;padding:10px 12px;border:1px solid #2f4350;border-radius:10px;background:#0d171d}.djx-rec-lista b{font-size:11px;letter-spacing:.08em;color:#8da4b2}
+.djx-rec-lista p{margin:0;color:#9bb6c2;font-size:12px}.djx-rec-fila{display:flex;align-items:center;gap:8px}.djx-rec-fila span{flex:1;color:#dfeaf0;font-size:13px}
+#ldxSongToast .ldx-btn{pointer-events:auto;margin-left:8px}#ldxSongToast.mostrar{pointer-events:auto}</style>
 <style>#ldxSongToast{position:fixed;left:50%;top:84px;transform:translateX(-50%) translateY(-8px);z-index:2147483000;max-width:min(680px,90vw);padding:10px 18px;border-radius:10px;border:1px solid #3d6070;background:#0d1a21f2;color:#e6f6fa;font:600 14px/1.4 system-ui,sans-serif;box-shadow:0 10px 28px #000a;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
 #ldxSongToast.mostrar{opacity:1;transform:translateX(-50%) translateY(0)}.djx-nombre{position:fixed;inset:0;z-index:2147483100;background:#000a;display:flex;align-items:center;justify-content:center}
 .djx-nombre-box{min-width:min(440px,90vw);padding:20px 22px;border-radius:14px;border:1px solid #3d6070;background:linear-gradient(180deg,#14212a,#0b1318);box-shadow:0 20px 50px #000c;color:#e6f6fa;font:14px system-ui,sans-serif;display:grid;gap:10px}
