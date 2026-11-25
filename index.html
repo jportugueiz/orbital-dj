@@ -27463,7 +27463,14 @@ function create(B){
  // 23 nov (Jorge): sector para editar las pistas → cuadrarlas entre sí (DJ_EDITOR_PISTAS) y separar una canción en 6 pistas (DJ_STEMS)
  const edit=button("✂ Editar pistas",()=>editTracks(),"ldx-song-edit");edit.title="Cuadra las pistas entre sí: muévelas en el tiempo y escucha cómo calzan";
  const split=button("Separar en 6 pistas",()=>{try{DJ_STEMS_PROPIOS.open()}catch(e){message("La separación en 6 pistas no está disponible aquí.")}},"ldx-song-split");split.title="Separa una canción tuya en 6 pistas con IA";
- const save=button("Guardar canción",()=>saveProject());
+ const save=button("Guardar canción",()=>askName());
+ // 25 nov (Jorge): al guardar sale una ventana para ponerle nombre a la canción
+ function askName(){if(!tracks.length||loading)return;document.getElementById("djxNombre")?.remove();
+  const bg=E("div",{id:"djxNombre",class:"djx-nombre"}),inp=E("input",{type:"text",maxlength:"80","aria-label":"Nombre de la canción"});inp.value=title&&title!=="Mi canción"?title:"";inp.placeholder="Nombre de la canción";
+  const close=()=>bg.remove(),ok=()=>{title=(inp.value||"").trim()||"Mi canción";titleInput.value=title;close();saveProject()};
+  inp.addEventListener("keydown",e=>{if(e.key==="Enter")ok();if(e.key==="Escape")close()});
+  bg.append(E("div",{class:"djx-nombre-box",role:"dialog","aria-label":"Guardar canción"},E("b",{},"Guardar canción"),E("p",{},"¿Cómo se llama?"),inp,E("div",{class:"djx-nombre-row"},button("Cancelar",close),button("💾 Guardar",ok,"djx-guardar"))));
+  bg.addEventListener("click",e=>{if(e.target===bg)close()});document.body.append(bg);setTimeout(()=>{inp.focus();inp.select()},30)}
  const fresh=button("Nueva",()=>clearProject());
  section.append(E("div",{class:"ldx-song-head"},E("h3",{},"CANCIONES"),titleInput),
   E("div",{class:"ldx-song-actions ldx-song-source"},library,add,edit,split),
@@ -27498,13 +27505,16 @@ function create(B){
  async function decode(ab){const d=K.ensureLive();return d.c.decodeAudioData(ab)}
  async function importFiles(files){if(loading)return;
   // 23 nov: también acepta un .zip con las pistas adentro (se abre aquí mismo, no se sube a ningún lado)
-  if(typeof DJ_ZIP!=="undefined"&&files.some(DJ_ZIP.isZip)){try{message("Abriendo el ZIP…");files=await DJ_ZIP.expand(files)}catch(e){message(e.message);return}}
-  if(files.length+tracks.length>36){message("Puedes cargar hasta 36 pistas por canción.");return}
+  // 25 nov (Jorge): un ZIP es una canción nueva: reemplaza a la que estaba (antes se sumaban sus pistas a la anterior) y toma el nombre del archivo
+  let zipTitle=null;
+  if(typeof DJ_ZIP!=="undefined"&&files.some(DJ_ZIP.isZip)){const z=files.find(DJ_ZIP.isZip);zipTitle=z.name.replace(/\.zip$/i,"").replace(/[_]+/g," ").trim();try{message("Abriendo el ZIP…");files=await DJ_ZIP.expand(files)}catch(e){message(e.message);return}}
+
+  if(files.length+(zipTitle?0:tracks.length)>36){message("Puedes cargar hasta 36 pistas por canción.");return}
   const token=++loadingToken;pause();loading=true;paint();message("Leyendo "+files.length+" pistas…");
-  try{const data=tracks.map(t=>({name:t.name,buffer:t.buffer,blob:t.blob,fileName:t.fileName,automation:t.automation,printedMix:t.printedMix,automationFinal:t.automationFinal,takeId:t.takeId,settings:settings(t)}));
+  try{const data=zipTitle?[]:tracks.map(t=>({name:t.name,buffer:t.buffer,blob:t.blob,fileName:t.fileName,automation:t.automation,printedMix:t.printedMix,automationFinal:t.automationFinal,takeId:t.takeId,settings:settings(t)}));
    for(const f of files){if(!f.type.startsWith("audio/")&&!/\.(wav|mp3|flac|ogg|oga|m4a|aac|aif|aiff)$/i.test(f.name))throw new Error("Formato no reconocido: "+f.name);
     const buffer=await decode(await f.arrayBuffer());data.push({name:f.name.replace(/\.[^.]+$/,""),fileName:f.name,blob:f,buffer})}
-   if(token!==loadingToken)return;install(data,title,projectId);prepareCriterionScore(tracks,null)
+   if(token!==loadingToken)return;if(zipTitle)install(data,zipTitle,null);else install(data,title,projectId);prepareCriterionScore(tracks,null);if(zipTitle)message("«"+zipTitle+"» lista: "+data.length+" pistas. Con «💾 Guardar» queda en este equipo.")
   }catch(e){message("No se cargaron las pistas nuevas: "+e.message)}finally{if(token===loadingToken){loading=false;paint()}}}
  function editTracks(){
   if(loading)return;const L=tracks.filter(t=>!t.derivado);
@@ -35594,7 +35604,12 @@ const DJ_VISTA_ANCHA=(()=>{
 })();
 </script>
 <style>#ldxSongToast{position:fixed;left:50%;top:84px;transform:translateX(-50%) translateY(-8px);z-index:2147483000;max-width:min(680px,90vw);padding:10px 18px;border-radius:10px;border:1px solid #3d6070;background:#0d1a21f2;color:#e6f6fa;font:600 14px/1.4 system-ui,sans-serif;box-shadow:0 10px 28px #000a;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
-#ldxSongToast.mostrar{opacity:1;transform:translateX(-50%) translateY(0)}#ldjx .djx-guardar{background:linear-gradient(180deg,#1f8f86,#13615b)!important;border-color:#58eee0!important;color:#eafffb!important;font-weight:700}</style>
+#ldxSongToast.mostrar{opacity:1;transform:translateX(-50%) translateY(0)}.djx-nombre{position:fixed;inset:0;z-index:2147483100;background:#000a;display:flex;align-items:center;justify-content:center}
+.djx-nombre-box{min-width:min(440px,90vw);padding:20px 22px;border-radius:14px;border:1px solid #3d6070;background:linear-gradient(180deg,#14212a,#0b1318);box-shadow:0 20px 50px #000c;color:#e6f6fa;font:14px system-ui,sans-serif;display:grid;gap:10px}
+.djx-nombre-box b{font-size:17px}.djx-nombre-box p{margin:0;color:#9fc0cc}
+.djx-nombre-box input{font:600 16px system-ui,sans-serif;padding:10px 12px;border-radius:8px;border:1px solid #3d6070;background:#081015;color:#fff}
+.djx-nombre-row{display:flex;justify-content:flex-end;gap:10px}.djx-nombre-row button{min-height:36px;padding:0 16px}
+.djx-guardar,#ldjx .djx-guardar{background:linear-gradient(180deg,#1f8f86,#13615b)!important;border-color:#58eee0!important;color:#eafffb!important;font-weight:700}</style>
 <style>/* 24 nov (Jorge): Decks A/B: el fader de Nivel de cada canal va a su deck (espacio libre junto a «Al pulso»);
    donde estaba, en el mezclador, va el crossfader grande de lado a lado (así el teclado de pads nunca lo tapa) */
 #ldjx .ldx-deck-transport.djx-con-nivel{position:relative}
