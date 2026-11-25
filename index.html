@@ -1,9 +1,18 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" class="orb-cubre" data-product="dj">
 <head>
-<style>@keyframes orbBar{from{background-position:-120% 0}to{background-position:220% 0}}@keyframes orbIn{from{opacity:0}to{opacity:1}}html.orb-cubre::after{content:"INICIANDO MOTOR 8D";position:fixed;inset:0;z-index:2147483646;display:flex;align-items:flex-end;justify-content:center;padding-bottom:calc(50vh - 165px);box-sizing:border-box;font:600 11px/1 system-ui,sans-serif;letter-spacing:.42em;color:#6fd8e0b0;background:url(visuales/marca/orbital-logo.png) center calc(50% - 30px)/min(540px,62vw) auto no-repeat,radial-gradient(circle at 50% 42%,#1e1036 0%,#0a0718 55%,#030306 100%);animation:orbIn .5s ease-out}html.orb-cubre::before{content:"";position:fixed;z-index:2147483647;left:calc(50% - 130px);top:calc(50% + 128px);width:260px;height:2px;border-radius:2px;background:linear-gradient(90deg,transparent,#3fe6ee,#b58cff,transparent) no-repeat,#ffffff14;background-size:45% 100%,100% 100%;animation:orbBar 1.5s linear infinite}</style><script>/* 24 nov (Jorge): no mostrar pantallas antiguas mientras carga; se quita cuando la portada o la consola están listas */document.documentElement.classList.add("orb-cubre");setTimeout(()=>document.documentElement.classList.remove("orb-cubre"),20000);</script>
+<style>html[data-product="dj"] body>:is(#ship,#play){display:none!important}html.orb-cubre body{visibility:hidden!important}html.orb-cubre::after{opacity:1!important}@keyframes orbBar{from{background-position:-120% 0}to{background-position:220% 0}}@keyframes orbIn{from{opacity:0}to{opacity:1}}html.orb-cubre::after{content:"INICIANDO MOTOR 8D";position:fixed;inset:0;z-index:2147483646;display:flex;align-items:flex-end;justify-content:center;padding-bottom:calc(50vh - 165px);box-sizing:border-box;font:600 11px/1 system-ui,sans-serif;letter-spacing:.42em;color:#6fd8e0b0;background:url(visuales/marca/orbital-logo.png) center calc(50% - 30px)/min(540px,62vw) auto no-repeat,radial-gradient(circle at 50% 42%,#1e1036 0%,#0a0718 55%,#030306 100%);opacity:1}html.orb-cubre::before{content:"";position:fixed;z-index:2147483647;left:calc(50% - 130px);top:calc(50% + 128px);width:260px;height:2px;border-radius:2px;background:linear-gradient(90deg,transparent,#3fe6ee,#b58cff,transparent) no-repeat,#ffffff14;background-size:45% 100%,100% 100%;animation:orbBar 1.5s linear infinite}</style><script>/* 24 nov (Jorge): no mostrar pantallas antiguas mientras carga; se quita cuando la portada o la consola están listas */document.documentElement.classList.add("orb-cubre");</script>
 <script>window.ORB_APP="dj";window.ORB_OTRA_APP="https://jportugueiz.github.io/orbital-wellness/";(()=>{try{const u=new URL(location.href);let c=0;if(u.searchParams.get("dj")!=="1"){u.searchParams.set("dj","1");c=1}if(!u.searchParams.has("mode")){u.searchParams.set("mode","classic");c=1}if(u.searchParams.has("bano")){u.searchParams.delete("bano");c=1}if(c)history.replaceState(history.state,"",u.href)}catch(_){}})();</script>
 <meta charset="utf-8">
+<script>
+if(new URLSearchParams(location.search).get("limpiar")==="orbital" && "caches" in window){
+  (async()=>{
+    const names=(await caches.keys()).filter(name=>/^(orbital-(?:(?:dj|wellness)-)?(?:shell|media|img)-|orbdj-modelos-ia$)/.test(name));
+    await Promise.all(names.map(name=>caches.delete(name)));
+    const url=new URL(location.href);url.searchParams.delete("limpiar");url.searchParams.set("inicio","limpio");location.replace(url.href);
+  })().catch(console.error);
+}
+</script>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#05060a">
 <title>ORBITAL DJ · el DJ espacial 3D por instrumento</title>
@@ -35480,7 +35489,7 @@ const ORB_APPS=(()=>{
   function guardDJ(){if(guardDJ.on)return;guardDJ.on=true;
    try{const orig=LAB_DJ_UI.close;LAB_DJ_UI.close=function(){try{if(typeof DJ_SIMPLE!=="undefined"&&DJ_SIMPLE.active){DJ_SIMPLE.set(false);return}}catch(e){}/* en la app DJ no hay nada detrás de la consola */};LAB_DJ_UI._closeOrig=orig}catch(e){}
    setInterval(()=>{const ld=document.getElementById("ldjx");if(ld&&(ld.hidden||!document.body.classList.contains("ldjx-open"))){document.documentElement.classList.add("orb-cubre");try{LAB_DJ_UI.open()}catch(e){}setTimeout(()=>document.documentElement.classList.remove("orb-cubre"),300)}},300)}
-  if(app==="dj"){home.style.visibility="hidden";const t0=Date.now();const go=()=>{if(typeof LAB_DJ_UI!=="undefined"&&LAB_DJ_UI.on&&LAB_DJ_UI.open){try{LAB_DJ_UI.open();setTimeout(()=>document.documentElement.classList.remove("orb-cubre"),250);guardDJ();return}catch(e){}}if(Date.now()-t0<15000)setTimeout(go,150);else{home.style.visibility="";document.documentElement.classList.remove("orb-cubre")}};const later=()=>setTimeout(()=>window.requestIdleCallback?requestIdleCallback(go,{timeout:3000}):go(),1500);if(document.readyState==="complete")later();else addEventListener("load",later,{once:true})}
+  if(app==="dj"){home.style.visibility="hidden";const t0=Date.now();const go=()=>{if(typeof LAB_DJ_UI!=="undefined"&&LAB_DJ_UI.on&&LAB_DJ_UI.open){try{LAB_DJ_UI.open();setTimeout(()=>document.documentElement.classList.remove("orb-cubre"),250);guardDJ();return}catch(e){}}if(Date.now()-t0<15000)setTimeout(go,150);else{home.style.visibility="";document.documentElement.classList.remove("orb-cubre")}};if(document.readyState==="loading")addEventListener("DOMContentLoaded",go,{once:true});else go()}
   // en la portada, la barra espaciadora no debe arrancar nada que esté detrás
   const onTop=()=>{const x=document.elementFromPoint(innerWidth/2,innerHeight/2);return !!(x&&x.closest("#oappHome"))};
   addEventListener("keydown",e=>{if(e.code==="Space"&&onTop()&&!/INPUT|TEXTAREA|SELECT|BUTTON/.test(e.target.tagName))e.stopImmediatePropagation()},true);
