@@ -2103,7 +2103,7 @@ body.ldjx-open #play :is(.play-stroke-options svg,#pHeightGraph){height:clamp(22
 .ldjx .ldx-song-play.lista{background:#2fd47a!important;border-color:#7dffb5!important;color:#032112!important;box-shadow:0 0 14px #3fe08a88!important}
 .ldjx .ldx-song-time{font:600 12px ui-monospace,monospace;color:#abceda}
 .ldjx .ldx-song-transport input{flex:1;min-width:120px;accent-color:#44e1e9}
-.ldjx .ldx-song-tracks{display:flex;flex-direction:column;gap:6px;max-height:45vh;overflow:auto}
+.ldjx .ldx-song-tracks{display:flex;flex-direction:column;gap:6px;max-height:none;overflow:visible}
 .ldjx .ldx-song-track{display:grid;grid-template-columns:minmax(95px,1fr) 40px minmax(65px,1fr) 34px 34px auto 30px;align-items:center;gap:6px;padding:7px;border:1px solid #34414b;border-left:3px solid var(--c);border-radius:8px;background:#10191f}
 .ldjx .ldx-song-track.playing{border-left-color:var(--c);box-shadow:inset 3px 0 12px color-mix(in srgb,var(--c) 15%,transparent)}
 .ldjx .ldx-song-track input{min-width:0;width:100%;accent-color:var(--c)}
@@ -2376,6 +2376,10 @@ body.ldjx-open #play :is(.play-stroke-options svg,#pHeightGraph){height:clamp(22
 @media(max-width:760px){.ldx-workspace .ldx-w-spatial-note{padding:9px 11px;font-size:10px;gap:7px;align-items:flex-start}.ldx-workspace .ldx-w-spatial-note>.ldx-btn{font-size:9px;max-width:95px;white-space:normal}}
 @media(max-width:760px){.ldx-workspace .ldx-w-mode-status{font-size:8px;max-width:110px}.ldx-workspace .ldx-w-auto-actions>.ldx-btn{font-size:11px;padding:8px 10px}.ldx-workspace .ldx-w-assistant-view>h3{font-size:14px}.ldx-workspace .ldx-w-transport .ldx-w-auto-transport{font-size:9px;min-height:40px;padding:5px}}
  
+.ldx-workspace .ldx-w-submenu:has(>[data-module-panel=show]:not([hidden])){display:flex;flex-direction:column;min-height:100%}
+.ldx-workspace .ldx-w-submenu>[data-module-panel=show]:not([hidden]){flex:1 0 auto}
+.ldjx .ldx-song-name::before{content:"";display:inline-block;width:8px;height:8px;margin-right:6px;border-radius:50%;background:#243039;box-shadow:inset 0 1px 2px #05090c;vertical-align:middle}
+.ldjx .ldx-song-track.playing .ldx-song-name::before{background:var(--c);box-shadow:0 0 6px var(--c)}
 .ldx-workspace .ldx-show-group {
   display: flex;
   flex-wrap: wrap;
@@ -27486,7 +27490,7 @@ function create(B){
    t.textContent=s;t.className="mostrar";clearTimeout(t._h);t._h=setTimeout(()=>{t.className=""},/^(Abriendo|Leyendo)/.test(s)?60000:6500)}catch(_){}}
  function barAt(time){return state==="playing"&&K.deck?K.deck.barAt(time):barCursor}
  function current(){if(state!=="playing")return offset;const d=K.deck,head=K.native&&tracks[0]?K.native.playhead(tracks[0].eng):null;if(head!=null)return clamp(head,0,duration);return clamp(offset+Math.max(0,(d?d.c.currentTime:started)-when),0,duration)}
- function paint(){section.classList.toggle("ldx-song-unloaded",!tracks.length);if(!scrub){progress.value=current();time.textContent=fmt(current())+" / "+fmt(duration)}play.textContent=loading?"Cargando…":state==="playing"?"Ⅱ Pausa":tracks.length&&!ready?"Preparando…":"▶ Play";play.classList.toggle("lista",!loading&&ready&&tracks.length>0&&state!=="playing");play.classList.toggle("prep",!loading&&!ready&&tracks.length>0&&state!=="playing");progress.disabled=play.disabled=stop.disabled=save.disabled=loading||!tracks.length;fresh.disabled=loading||!tracks.length;add.disabled=library.disabled=loading;B.sync()}
+ function paint(){if(state!=="playing")for(const row of list.children)row.classList.remove("playing");section.classList.toggle("ldx-song-unloaded",!tracks.length);if(!scrub){progress.value=current();time.textContent=fmt(current())+" / "+fmt(duration)}play.textContent=loading?"Cargando…":state==="playing"?"Ⅱ Pausa":tracks.length&&!ready?"Preparando…":"▶ Play";play.classList.toggle("lista",!loading&&ready&&tracks.length>0&&state!=="playing");play.classList.toggle("prep",!loading&&!ready&&tracks.length>0&&state!=="playing");progress.disabled=play.disabled=stop.disabled=save.disabled=loading||!tracks.length;fresh.disabled=loading||!tracks.length;add.disabled=library.disabled=loading;B.sync()}
  function settings(t){const group=t.groupKey&&members(t).every(o=>o.song)?t:{};return {automationFinal:!!t.automationFinal,name:t.name,vol:t.vol,mute:t.mute,solo:t.solo,mov:t.mov,pinned:t.pinned,role:t.role,rol:t.rol,trim:t.trim,hi:t.hi,mid:t.mid,low:t.low,filt:t.filt,br:t.br,rec:t.rec,ctl:t.ctl,groupKey:group.groupKey,groupName:group.groupName,groupLeader:group.groupLeader,groupOffset:group.groupOffset}}
  function classify(name){const n=name.toLowerCase();return /vox|voz|vocal|voice|coros/.test(n)?["lead","voces"]:/kick|bombo|drum|batería/.test(n)?["bombo","bombo"]:/bass|bajo|sub/.test(n)?["bajo","bajo"]:/perc|hat|ritmo/.test(n)?["perc","percusion"]:/pad|atmos|amb/.test(n)?["pads","pads"]:["lead","melodia"]}
  function makeTrack(data,i){const id="song_"+Date.now().toString(36)+"_"+i,role=classify(data.name),t=B.makeTrack(i,{id,eng:id,song:true,name:data.name,color:colors[i%colors.length],role:data.role||role[0],rol:data.rol||role[1],
@@ -27651,7 +27655,8 @@ function create(B){
  function tick(now){if(state==="playing"&&current()>=duration-.002){offset=duration;state="ended";++generation;for(const t of tracks){K.stems.stop(t.eng);t.state.play=-1}if(K.deck&&K.deck.playing)K.deck.stop();paint();message("Fin de la canción.")}
   if(now-lastPaint<100)return;lastPaint=now;if(!scrub){progress.value=current();time.textContent=fmt(current())+" / "+fmt(duration)}
   for(const t of tracks){const q=K.deck?.R[t.eng]?.ch?.eq;if(q){const buf=t._meter||(t._meter=new Float32Array(q.an.fftSize));q.an.getFloatTimeDomainData(buf);let energy=0;for(const v of buf)energy+=v*v;t.level=Math.sqrt(energy/buf.length);t.audible=t.level>.001}else t.audible=false}
-  for(const row of list.children){const t=tracks.find(t=>t.id===row.dataset.songTrack);if(t)row.classList.toggle("playing",state==="playing"&&t.state.play>=0&&!t.mute)}
+  const soloActive=B.groupTracks().some(track=>track.solo);
+  for(const row of list.children){const t=tracks.find(track=>track.id===row.dataset.songTrack);if(t)row.classList.toggle("playing",state==="playing"&&t.state.play>=0&&t.audible&&t.vol>0&&!t.mute&&(!soloActive||t.solo))}
  }
  K.HOOKS.transport.push(e=>{if(!e.on&&state==="playing")pause()});
  setInterval(()=>{if(state==="playing")tick(performance.now())},125);
